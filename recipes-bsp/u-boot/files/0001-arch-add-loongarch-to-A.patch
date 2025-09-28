@@ -1,0 +1,37 @@
+From 7dc5a1092135212eb1da04f2c87ed6cf5345004d Mon Sep 17 00:00:00 2001
+From: otomam <1020793665@qq.com>
+Date: Sat, 27 Sep 2025 16:16:30 +0800
+Subject: [PATCH] arch: add loongarch to -A
+
+---
+ boot/image.c    | 1 +
+ include/image.h | 2 +-
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/boot/image.c b/boot/image.c
+index abac254e026..7392296d2ad 100644
+--- a/boot/image.c
++++ b/boot/image.c
+@@ -93,6 +93,7 @@ static const table_entry_t uimage_arch[] = {
+ 	{	IH_ARCH_X86_64,		"x86_64",	"AMD x86_64",	},
+ 	{	IH_ARCH_XTENSA,		"xtensa",	"Xtensa",	},
+ 	{	IH_ARCH_RISCV,		"riscv",	"RISC-V",	},
++	{	IH_ARCH_LA,		"loongarch",	"LoongArch",	},
+ 	{	-1,			"",		"",		},
+ };
+ 
+diff --git a/include/image.h b/include/image.h
+index c52fced9b40..39c082421f5 100644
+--- a/include/image.h
++++ b/include/image.h
+@@ -139,7 +139,7 @@ enum {
+ 	IH_ARCH_X86_64,			/* AMD x86_64, Intel and Via */
+ 	IH_ARCH_XTENSA,			/* Xtensa	*/
+ 	IH_ARCH_RISCV,			/* RISC-V */
+-
++        IH_ARCH_LA,                     /* LoongArch */
+ 	IH_ARCH_COUNT,
+ };
+ 
+-- 
+2.43.0

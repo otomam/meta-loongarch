@@ -1,0 +1,40 @@
+SUMMARY = "Linux Kernel"
+SECTION = "kernel"
+LICENSE = "GPL-2.0-with-Linux-syscall-note"
+
+DESCRIPTION = "Linux kernel for Loongson2"
+
+inherit kernel
+inherit kernel-yocto
+
+KERNEL_VERSION_SANITY_SKIP="1"
+ERROR_QA:remove = "patch-status"
+
+COMPATIBLE_MACHINE = "^(loongson-2k0300-99pai)$"
+
+LIC_FILES_CHKSUM = "file://COPYING;md5=6bc538ed5bd9a7fc9398086aedcd7e46"
+
+KBRANCH = "6.9"
+SRCREV = "ace567fddffbeb902ba3742e67ecc957958ec949"
+
+SRC_URI = "git://gitee.com/otomam/linux-loongson.git;protocol=https;branch=${KBRANCH} \
+           "
+
+S = "${WORKDIR}/git"
+
+KERNEL_IMAGETYPE = "uImage"
+KERNEL_IMAGETYPES = "uImage"
+
+PV = "6.9"
+PR = "r0"
+
+KBUILD_DEFCONFIG ?= "ls2k0300_defconfig"
+
+do_compile:prepend() {
+    if [ ! -d "${B}/drivers/net/can/ls_can" ]; then
+        mkdir -p "${B}/drivers/net/can/ls_can"
+    fi
+
+    cp ${S}/drivers/net/can/ls_can/lscanfd_dma.elf ${B}/drivers/net/can/ls_can/lscanfd_dma.elf
+    cp ${S}/drivers/net/can/ls_can/lscanfd_platform.elf ${B}/drivers/net/can/ls_can/lscanfd_platform.elf
+}
