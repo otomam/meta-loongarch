@@ -1,14 +1,15 @@
 SUMMARY = "Linux Kernel"
 SECTION = "kernel"
-LICENSE = "GPL-2.0-with-Linux-syscall-note"
+LICENSE = "GPL-2.0-only"
 
 DESCRIPTION = "Linux kernel for Loongson2"
 
-inherit kernel
-inherit kernel-yocto
+require recipes-kernel/linux/linux-yocto.inc
+
+LINUX_VERSION_EXTENSION = ""
+LINUX_VERSION = "6.9"
 
 KERNEL_VERSION_SANITY_SKIP="1"
-ERROR_QA:remove = "patch-status"
 
 COMPATIBLE_MACHINE = "^(loongson-2k0300-99pai)$"
 
@@ -17,13 +18,13 @@ LIC_FILES_CHKSUM = "file://COPYING;md5=6bc538ed5bd9a7fc9398086aedcd7e46"
 KBRANCH = "6.9"
 SRCREV = "ace567fddffbeb902ba3742e67ecc957958ec949"
 
-SRC_URI = "git://gitee.com/otomam/linux-loongson.git;protocol=https;branch=${KBRANCH} \
+SRC_URI = " \
+            git://gitee.com/otomam/linux-loongson.git;protocol=https;branch=${KBRANCH} \
+            file://fragment.cfg \
+            file://0001-fit-image-pass-dtb.patch \
            "
 
 S = "${WORKDIR}/git"
-
-KERNEL_IMAGETYPE = "uImage"
-KERNEL_IMAGETYPES = "uImage"
 
 PV = "6.9"
 PR = "r0"

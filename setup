@@ -1,0 +1,4 @@
+git apply --directory=poky/ meta-loongarch/0001-loongarch-support.patch
+
+export TEMPLATECONF=$PWD/meta-loongarch/conf/templates/default
+. poky/oe-init-build-env

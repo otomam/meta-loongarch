@@ -5,7 +5,10 @@ DEPENDS += "bc-native dtc-native gnutls-native python3-pyelftools-native"
 
 PACKAGE_ARCH = "${MACHINE_ARCH}"
 
-SRC_URI = "git://gitee.com/otomam/u-boot.git;protocol=https;branch=2024.04"
+SRC_URI = " git://gitee.com/otomam/u-boot.git;protocol=https;branch=2024.04 \
+            file://fragment.cfg \
+            file://0001-boot-fitimage.patch \
+            "
 SRCREV = "9b2dc78d7a519bff625e32ec9f14bcf6b34550ea"
 
 UBOOT_MACHINE = "loongson_2k0300_defconfig"

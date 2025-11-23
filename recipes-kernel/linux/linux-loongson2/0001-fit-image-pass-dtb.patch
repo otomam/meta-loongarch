@@ -1,0 +1,48 @@
+From 66f75ca7de98a8ba15e30151dc5fddaef8479ca2 Mon Sep 17 00:00:00 2001
+From: oto <oto102079@gmail.com>
+Date: Sun, 23 Nov 2025 12:12:47 +0800
+Subject: [PATCH] fit image pass dtb
+
+---
+ arch/loongarch/kernel/efi.c   | 3 +++
+ arch/loongarch/kernel/setup.c | 4 ++++
+ 2 files changed, 7 insertions(+)
+
+diff --git a/arch/loongarch/kernel/efi.c b/arch/loongarch/kernel/efi.c
+index 000825406..357f3c3da 100644
+--- a/arch/loongarch/kernel/efi.c
++++ b/arch/loongarch/kernel/efi.c
+@@ -51,6 +51,9 @@ void __init *efi_fdt_pointer(void)
+ 
+ void __init efi_runtime_init(void)
+ {
++	if (!efi_system_table)
++		return;
++
+ 	if (!efi_enabled(EFI_BOOT) || !efi_systab->runtime)
+ 		return;
+ 
+diff --git a/arch/loongarch/kernel/setup.c b/arch/loongarch/kernel/setup.c
+index 4ed745667..241e6616d 100644
+--- a/arch/loongarch/kernel/setup.c
++++ b/arch/loongarch/kernel/setup.c
+@@ -281,12 +281,16 @@ static void __init fdt_setup(void)
+ 	if (acpi_os_get_root_pointer())
+ 		return;
+ 
++#if 0
++	// builtin DTB
+ 	/* Prefer to use built-in dtb, checking its legality first. */
+ 	if (!fdt_check_header(__dtb_start))
+ 		fdt_pointer = __dtb_start;
+ 	else
+ 		fdt_pointer = efi_fdt_pointer(); /* Fallback to firmware dtb */
++#endif
+ 
++	fdt_pointer = (void *)fw_arg1; // from u-boot
+ 	if (!fdt_pointer || fdt_check_header(fdt_pointer))
+ 		return;
+ 
+-- 
+2.52.0
+

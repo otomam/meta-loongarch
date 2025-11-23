@@ -1,0 +1,836 @@
+From 1582a25451d487b69322f75a33b5bebb4e22687b Mon Sep 17 00:00:00 2001
+From: oto <oto102079@gmail.com>
+Date: Sun, 23 Nov 2025 11:01:34 +0800
+Subject: [PATCH] boot fitimage
+
+---
+ arch/loongarch/cpu/start.S                    |  49 +++---
+ arch/loongarch/include/asm/io.h               |   2 +
+ arch/loongarch/include/asm/loongarch.h        |   6 +-
+ arch/loongarch/lib/bootm.c                    |  12 +-
+ .../ls2k0300/clksetting_2k0300.S              |   6 +-
+ .../mach-loongson/ls2k0300/lowlevel_init.S    |   5 +-
+ arch/loongarch/mach-loongson/spl.c            |   4 +-
+ board/loongson/common/bootparam.c             |   6 +-
+ board/loongson/common/loongson_update_menu.c  |   3 +
+ board/loongson/common/platform.c              | 155 +++++++++---------
+ board/loongson/ls2k0300/ls2k0300.c            |   1 -
+ cmd/elf.c                                     |  10 +-
+ common/autoboot.c                             |   3 +
+ configs/loongson_2k0300_defconfig             |   6 +-
+ drivers/gpio/ls_gpio.c                        |   2 +-
+ drivers/i2c/lsfs_i2c.c                        |   2 +-
+ drivers/ram/loongson/ls_ddr4.c                |  47 +++---
+ drivers/rtc/ls_rtc.c                          |   4 +-
+ drivers/usb/host/ehci.h                       |   3 +
+ drivers/video/loongson_fb.c                   |   6 +-
+ include/configs/loongson_2k0300.h             |   8 -
+ 21 files changed, 175 insertions(+), 165 deletions(-)
+
+diff --git a/arch/loongarch/cpu/start.S b/arch/loongarch/cpu/start.S
+index 05616f8e..0a66ce20 100644
+--- a/arch/loongarch/cpu/start.S
++++ b/arch/loongarch/cpu/start.S
+@@ -131,7 +131,7 @@
+  * tp($r2)		link versus load offset, used to relocate absolute adresses.
+  * gp($r21) 	global data pointer
+  */
+- #define relc_reg	tp
++ #define relc_reg	tp	// printstr 里面会用到这个
+ 
+ 	.globl	_start
+ 	.globl	start
+@@ -142,11 +142,11 @@
+ _start:
+ start:
+ #if !defined(CONFIG_SPL) || defined(CONFIG_SPL_BUILD)
+-	li.d	t0, (1 << (24 + 32))	//set CPUCFG 0 bit24
++	li.d	t0, (1 << (24 + 32))	// MCSR0_HUGEPG_SHIFT
+ 	csrxchg	t0, t0, LOONGARCH_CSR_PRID
+ 
+-	li.d	t0, (0xa << (16 + 32))	//set CPUCFG 0x13 bit16-23
+-	li.d	t1, (0xff << (16 + 32))
++	li.d	t0, (0xa << (16 + 32))
++	li.d	t1, (0xff << (16 + 32))	// MCSR9_L2U_IDX_SHIFT
+ 	csrxchg	t0, t1, LOONGARCH_CSR_MCSR9
+ 
+ 	/* enable perf counter as cp0 counter */
+@@ -154,11 +154,11 @@ start:
+ 	csrxchg t0, t0, LOONGARCH_CSR_PERFCTRL0
+ 
+ 	/* open auto flush SFB */
+-	li.w	t0, (0x1 << 9)
++	li.w	t0, (0x1 << 9)			// CSR_ANTI_FLUSHSFB_SHIFT
+ 	csrxchg t0, t0, LOONGARCH_CSR_IMPCTL1
+ 
+ 	/* fast_ldq_dis close */
+-	li.w	t0, (0x1 << 12)
++	li.w	t0, (0x1 << 12)			// CSR_FASTLDQ_SHIFT
+ 	csrxchg zero, t0, LOONGARCH_CSR_IMPCTL1
+ 
+ 	/* low power setting */
+@@ -166,40 +166,41 @@ start:
+ 	csrxchg t0, t0, LOONGARCH_CSR_MCSR24
+ 
+ 	/* pll setting */
+-	li.d	t0, 0x0001000107270e00
++	li.d	t0, 0x0001000107270e00	// 0x7270e00 = 120Mhz, MUL=0x1, DIV=0x1
+ 	csrwr	t0, LOONGARCH_CSR_MCSR2
+ 
+-/*
+-* set DMW0(0x180) to uncached
+-* set DMW1(0x181) to cached
+-*/
+-	li.d	t0, UNCACHED_MEMORY_ADDR | 0xf
++	/*
++	* set DMW0(0x180) to uncached
++	* set DMW1(0x181) to cached
++	*/
++	li.d	t0, UNCACHED_MEMORY_ADDR | 0xf // 强序非缓存
+ 	csrwr	t0, LOONGARCH_CSR_DMWIN0
+-	li.d	t0, CACHED_MEMORY_ADDR | 0x1f
++	li.d	t0, CACHED_MEMORY_ADDR | 0x1f // 一致可缓存
+ 	csrwr	t0, LOONGARCH_CSR_DMWIN1
+ 
+ 
+-/*
+- * should before execution jr shutdown slave core
+- * otherwise speculative execution cause error
+- */
++	/*
++	* should before execution jr shutdown slave core
++	* otherwise speculative execution cause error
++	*/
+ 	/* clear Vint cofigure */
+-	li.d	t0, (0x7 << 16)
++	li.d	t0, (0x7 << 16)		// VS=0 例外和中断的入口地址是同一个
+ 	csrxchg zero, t0, LOONGARCH_CSR_ECFG
+ 	/* set ebase address */
+-	li.d	t0, PHYS_TO_CACHED(BOOT_SPACE_BASE + 0x1000)
++	li.d	t0, PHYS_TO_CACHED(BOOT_SPACE_BASE + 0x1000) // (0x1c000000 + 0x1000) >> 12 页号
+ 	csrwr	t0, LOONGARCH_CSR_EBASE
++
+ 	/* set TLB excption address */
+ 	li.d	t0, BOOT_SPACE_BASE + 0x1000
+-	csrwr	t0, LOONGARCH_CSR_TLBREBASE
++	csrwr	t0, LOONGARCH_CSR_TLBREBASE		// 传入物理地址
+ 
+ 	/* enable llexc */
+ 	li.w	t0, (1 << 3)
+-	csrxchg zero, t0, LOONGARCH_CSR_MCSR1
++	csrxchg zero, t0, LOONGARCH_CSR_MCSR1	// 浮点运算标准的版本号
+ 
+ 	/* disable interrupt */
+ 	li.d	t0, (1 << 2)
+-	csrxchg zero, t0, LOONGARCH_CSR_CRMD
++	csrxchg zero, t0, LOONGARCH_CSR_CRMD	// 全局中断使能，高有效
+ 
+ 	bl	lowlevel_init
+ 	nop
+@@ -216,7 +217,7 @@ start:
+ 	jirl	zero, t0, 0
+ 	/* now pc run to 0x90xxxxxxxxxxxxxx */
+ 	/* DA disable for 0x80xxxxxxxxxxxxxx and 0x90xxxxxxxxxxxx address can be used */
+-	li.w	t0, 0xb0
++	li.w	t0, 0xb0 // ra = .
+ 	csrwr	t0, LOONGARCH_CSR_CRMD
+ 
+ 	/* calculate ASM stage print function relc_reg address */
+@@ -283,7 +284,7 @@ jump_cache:
+ 	/*
+ 	* alloc memory to gd ptr
+ 	*/
+-	or		sp, a0, zero
++	or		sp, a0, zero	// set a0 in ram_init
+ 	bl		board_init_f_alloc_reserve
+ 	bl		board_init_f_init_reserve
+ 
+diff --git a/arch/loongarch/include/asm/io.h b/arch/loongarch/include/asm/io.h
+index 2b9b27f3..262e2067 100644
+--- a/arch/loongarch/include/asm/io.h
++++ b/arch/loongarch/include/asm/io.h
+@@ -20,6 +20,8 @@ static inline void sync(void)
+ 
+ #ifdef CONFIG_ARCH_MAP_SYSMEM
+ 
++extern void *map_sysmem_mach(phys_addr_t paddr, unsigned long len);
++
+ static __always_inline void *map_sysmem(phys_addr_t paddr, unsigned long len)
+ {
+ 	if (VA_TO_PHYS(paddr) >= (unsigned long)BOOT_SPACE_BASE &&
+diff --git a/arch/loongarch/include/asm/loongarch.h b/arch/loongarch/include/asm/loongarch.h
+index 835c7814..ff217815 100644
+--- a/arch/loongarch/include/asm/loongarch.h
++++ b/arch/loongarch/include/asm/loongarch.h
+@@ -902,7 +902,7 @@ static inline u32 read_cpucfg(u32 reg)
+ #define  MCSR9_L2U_SIZE			(_ULCAST_(0x7f) << MCSR9_L2U_SIZE_SHIFT)
+ #define  MCSR9_L2U_IDX_SHIFT		48
+ #define  MCSR9_L2U_IDX_WIDTH		8
+-#define  MCSR9_L2U_IDX			(_ULCAST_(0xff) << MCSR9_IDX_LOG_SHIFT)
++#define  MCSR9_L2U_IDX			(_ULCAST_(0xff) << MCSR9_L2U_IDX_SHIFT)
+ #define  MCSR9_L2U_WAY_SHIFT		32
+ #define  MCSR9_L2U_WAY_WIDTH		16
+ #define  MCSR9_L2U_WAY			(_ULCAST_(0xffff) << MCSR9_L2U_WAY_SHIFT)
+@@ -928,11 +928,11 @@ static inline u32 read_cpucfg(u32 reg)
+ #define  MCSR10_L3U_WAY			(_ULCAST_(0xffff) << MCSR10_L3U_WAY_SHIFT)
+ 
+ #define LOONGARCH_CSR_MCSR24		0xf0	/* cpucfg48 */
+-#define  MCSR24_RAMCG_SHIFT		3
++#define  MCSR24_RAMCG_SHIFT			3
+ #define  MCSR24_RAMCG			(_ULCAST_(1) << MCSR24_RAMCG_SHIFT)
+ #define  MCSR24_VFPUCG_SHIFT		2
+ #define  MCSR24_VFPUCG			(_ULCAST_(1) << MCSR24_VFPUCG_SHIFT)
+-#define  MCSR24_NAPEN_SHIFT		1
++#define  MCSR24_NAPEN_SHIFT			1
+ #define  MCSR24_NAPEN			(_ULCAST_(1) << MCSR24_NAPEN_SHIFT)
+ #define  MCSR24_MCSRLOCK_SHIFT		0
+ #define  MCSR24_MCSRLOCK		(_ULCAST_(1) << MCSR24_MCSRLOCK_SHIFT)
+diff --git a/arch/loongarch/lib/bootm.c b/arch/loongarch/lib/bootm.c
+index c852a229..6dd00cb5 100644
+--- a/arch/loongarch/lib/bootm.c
++++ b/arch/loongarch/lib/bootm.c
+@@ -14,6 +14,7 @@
+ #include <asm/addrspace.h>
+ #include <asm/global_data.h>
+ #include <asm/io.h>
++#include <malloc.h>
+ 
+ #if defined(CONFIG_LOONGSON_BOOT_FIXUP)
+ extern void *build_boot_param(void);
+@@ -24,13 +25,11 @@ DECLARE_GLOBAL_DATA_PTR;
+ #define	LINUX_MAX_ENVS		256
+ #define	LINUX_MAX_ARGS		256
+ 
++#if !defined(CONFIG_LOONGSON_BOOT_FIXUP)
+ static int linux_argc;
+ static char **linux_argv;
+-static char *linux_argp;
+-
+ static char **linux_env;
+-static char *linux_env_p;
+-static int linux_env_idx;
++#endif
+ 
+ static ulong arch_get_sp(void)
+ {
+@@ -94,7 +93,7 @@ static void boot_prep_linux(struct bootm_headers *images)
+ 		if (images->initrd_start) {
+ 			rd_start = images->initrd_start;
+ 			rd_size = images->initrd_end - images->initrd_start;
+-			linux_command_line = malloc((bootargs ? strlen(bootargs) : 0) + 64);
++			linux_command_line = (char *)malloc((bootargs ? strlen(bootargs) : 0) + 64);
+ 			if (bootargs)
+ 				sprintf(linux_command_line, "%s rd_start=0x%016llX rd_size=0x%lX", bootargs, (long long)(long)rd_start, rd_size);
+ 			else
+@@ -135,8 +134,7 @@ static void boot_jump_linux(struct bootm_headers *images)
+ 	if (images->ft_len) {
+ 		kernel(-2, (ulong)images->ft_addr, 0, 0);
+ 	} else {
+-		kernel(linux_argc, (ulong)linux_argv, (ulong)linux_env,
+-			linux_extra);
++		kernel(linux_argc, (ulong)linux_argv, (ulong)linux_env, 0);
+ 	}
+ #endif
+ }
+diff --git a/arch/loongarch/mach-loongson/ls2k0300/clksetting_2k0300.S b/arch/loongarch/mach-loongson/ls2k0300/clksetting_2k0300.S
+index cac00021..9ab90eb5 100644
+--- a/arch/loongarch/mach-loongson/ls2k0300/clksetting_2k0300.S
++++ b/arch/loongarch/mach-loongson/ls2k0300/clksetting_2k0300.S
+@@ -93,16 +93,16 @@ PLL LOOPC overflow
+ 	and	t1, t1, t2
+ 	li.w	t2, (MEMDIV_MODE << DDR_L2DIV_OUT_MEMDIV_SHIFT)
+ 	or	t2, t2, t1
+-	st.w	t2, t0, 0x4
++	st.w	t2, t0, 0x4 // memdiv_mode = 1
+ 
+ /*mem div reset*/
+ 	ld.w	t1, t0, 4
+ 	li.w	t2, ~(1 << 16)
+ 	and	t2, t1, t2
+-	st.w	t2, t0, 0x4
++	st.w	t2, t0, 0x4	// memdiv_rstn = 0
+ 	li.w	t2, (1 << 16)
+ 	or	t2, t2, t1
+-	st.w	t2, t0, 0x4
++	st.w	t2, t0, 0x4	// memdiv_rstn = 1
+ 
+ 	li.d	t0, LS_DDR_PLL_L
+ 	li.w	t1, PLL_L1_PD_PLL	//power down pll first
+diff --git a/arch/loongarch/mach-loongson/ls2k0300/lowlevel_init.S b/arch/loongarch/mach-loongson/ls2k0300/lowlevel_init.S
+index 41e80cbc..34b4c458 100644
+--- a/arch/loongarch/mach-loongson/ls2k0300/lowlevel_init.S
++++ b/arch/loongarch/mach-loongson/ls2k0300/lowlevel_init.S
+@@ -37,18 +37,19 @@ ENTRY(lowlevel_init)
+ # 	bne	t2, t1, spi_quad_io
+ # #endif
+ 	
++	// ???
+ 	/*close usb & ddr soft reset: [0] ddr, [7] usbm*/
+ 	li.w  	t1, 0xffffff7e 
+ 	st.w 	t1, t0, 0x1c
+ 
++	// ???
+ 	/*unvalid ddr soft reset: [0] ddr*/
+ 	ld.w	t1, t0, 0x1c
+ 	ori     t1, t1, 0x1
+ 	st.w 	t1, t0, 0x1c
+ 
+ 	/*[103:96] en [111:104] coherent*/
+-	/*0:cpu    1:usb     2:gmac0    3:gmac1   4:dc   
+-		5:apb-dma(sdio spi can .etc)*/
++	/*0:cpu    1:usb     2:gmac0    3:gmac1   4:dc   5:apb-dma(sdio spi can .etc)*/
+ 	li.d	t0, LS_GENERAL_CFG3
+ 	ld.w	t1, t0, 0x0
+ 	li.w	t2, ((0x1f << 1) | (0x1f << 9))  //cache coherent for usb/gmac0/gmac1/dc
+diff --git a/arch/loongarch/mach-loongson/spl.c b/arch/loongarch/mach-loongson/spl.c
+index 5b16d142..eef7f16f 100644
+--- a/arch/loongarch/mach-loongson/spl.c
++++ b/arch/loongarch/mach-loongson/spl.c
+@@ -106,7 +106,7 @@ static ulong spl_board_load_read(struct spl_load_info *load, ulong sector,
+ 	debug("%s: sector %lx, count %lx, buf %lx\n",
+ 	      __func__, sector, count, (ulong)buf);
+ 
+-	memcpy(buf, sector, count);
++	memcpy(buf, (void *)sector, count);
+ 	return count;
+ }
+ 
+@@ -242,7 +242,7 @@ static int spl_board_load_image(struct spl_image_info *spl_image,
+ 		memcpy((void *)CONFIG_SYS_LOAD_ADDR,
+ 				imgaddr, roundup(fdt_totalsize(header), 4));
+ 		ret = spl_parse_image_header(spl_image, bootdev,
+-				(struct image_header *)CONFIG_SYS_LOAD_ADDR);
++				(struct legacy_img_hdr *)CONFIG_SYS_LOAD_ADDR);
+ 	} else if (IS_ENABLED(CONFIG_SPL_LOAD_FIT) &&
+ 			image_get_magic(header) == FDT_MAGIC) {
+ 		struct spl_load_info load;
+diff --git a/board/loongson/common/bootparam.c b/board/loongson/common/bootparam.c
+index 66d53366..0e0cba6a 100644
+--- a/board/loongson/common/bootparam.c
++++ b/board/loongson/common/bootparam.c
+@@ -4,6 +4,8 @@
+ #include <dm/device.h>
+ #include <dm/uclass.h>
+ #include <ram.h>
++#include <env.h>
++#include <efi_loader.h>
+ #include "bootparam.h"
+ 
+ #include "board_kernel_product.h"
+@@ -25,8 +27,6 @@ const efi_guid_t smbios_guid = SMBIOS_TABLE_GUID;
+ 
+ extern struct efi_system_table systab;
+ extern efi_status_t efi_init_systab(void);
+-extern efi_status_t efi_install_configuration_table(const efi_guid_t *guid,
+-			void *table);
+ extern ulong write_smbios_table(ulong addr);
+ 
+ unsigned char checksum8(char *buff, int size)
+@@ -167,9 +167,11 @@ void loongson_fdt_init(void)
+ 			fdt = NULL;
+ 		}
+ 	}
++#ifdef ACPI_SUPPORT
+ 	if (fdt)
+ 		efi_install_configuration_table(&fdt_guid,
+ 						(void *)fdt);
++#endif
+ }
+ 
+ int init_boot_param(struct boot_params *bp)
+diff --git a/board/loongson/common/loongson_update_menu.c b/board/loongson/common/loongson_update_menu.c
+index 5212ae2d..9c0f8739 100644
+--- a/board/loongson/common/loongson_update_menu.c
++++ b/board/loongson/common/loongson_update_menu.c
+@@ -169,6 +169,9 @@ __weak void update_rotation(char *command, int num)
+ {
+ 	run_command(command, 0);
+ }
++#else
++extern char* get_resolution_option(int n);
++extern void update_rotation(char *command, int num);
+ #endif
+ 
+ __weak int set_board_kernel_product_id(char* command)
+diff --git a/board/loongson/common/platform.c b/board/loongson/common/platform.c
+index db93fcd4..3b93b976 100644
+--- a/board/loongson/common/platform.c
++++ b/board/loongson/common/platform.c
+@@ -231,83 +231,6 @@ int misc_init_r(void)
+ }
+ #endif
+ 
+-/*
+- * display uboot version info on lcd
+- * if you make with -DDISPLAY_BANNER_ON_VIDCONSOLE it will
+- * display it on lcd
+- */
+-static int vidconsole_notice(char *buf)
+-{
+-#if defined(CONFIG_VIDEO) && defined(CONFIG_LOONGSON_VIDCONSOLE_NOTICE)
+-	struct vidconsole_priv *priv;
+-	struct udevice *con, *vdev = NULL;
+-	int col, row, len, ret;
+-	int vidcon_id = 0;
+-	for (uclass_first_device(UCLASS_VIDEO, &vdev);
+-				vdev; uclass_next_device(&vdev)) {
+-		debug("video device: %s\n", vdev->name);
+-		vidcon_id++;
+-	}
+-
+-	if (vidcon_id < 1) {
+-		debug("vidconsole no exist\n");
+-		sprintf(buf, "Press %s, %s", NOTICE_STR1, NOTICE_STR2);
+-		return 0;
+-	}
+-
+-	for (uclass_first_device(UCLASS_VIDEO_CONSOLE, &con);
+-				con; uclass_next_device(&con)) {
+-		vidconsole_put_string(con, ANSI_CURSOR_SAVE);
+-		priv = dev_get_uclass_priv(con);
+-		row = priv->rows - 1;
+-#ifdef DISPLAY_BANNER_ON_VIDCONSOLE
+-		display_options_get_banner(false, buf, DISPLAY_OPTIONS_BANNER_LENGTH);
+-		len = strcspn(buf, "\n");
+-		buf[len] = 0;
+-		col = (priv->cols / 2) - (len / 2);
+-		if (col < 0)
+-			col = 0;
+-		vidconsole_position_cursor(con, col, row);
+-		vidconsole_put_string(con, buf);
+-		row -= 1;
+-#endif
+-		sprintf(buf, "Press %s, %s", NOTICE_STR1, NOTICE_STR2);
+-		len = strlen(buf);
+-		col = (priv->cols / 2) - (len / 2);
+-		if (col < 0)
+-			col = 0;
+-		vidconsole_position_cursor(con, col, row);
+-		vidconsole_put_string(con, buf);
+-		vidconsole_position_cursor(con, 0, 0);
+-		vidconsole_put_string(con, ANSI_CURSOR_RESTORE);
+-	}
+-#else
+-	sprintf(buf, "Press %s, %s", NOTICE_STR1, NOTICE_STR2);
+-#endif
+-	return 0;
+-}
+-
+-static void print_notice(void)
+-{
+-	char notice[DISPLAY_OPTIONS_BANNER_LENGTH];
+-
+-	if (vidconsole_notice(notice))
+-		sprintf(notice, "Press %s, %s", NOTICE_STR1, NOTICE_STR2);
+-
+-	printf("************************** Notice **************************\n");
+-	printf("%s\r\n", notice);
+-	printf("************************************************************\n");
+-}
+-
+-static void loongson_env_trigger(void)
+-{
+-	run_command("loongson_env_trigger init", 0);
+-	run_command("loongson_env_trigger ls_trigger_u_kernel", 0);
+-	run_command("loongson_env_trigger ls_trigger_u_rootfs", 0);
+-	run_command("loongson_env_trigger ls_trigger_u_uboot", 0);
+-	run_command("loongson_env_trigger ls_trigger_boot", 0);
+-}
+-
+ #ifdef CONFIG_BOARD_EARLY_INIT_F
+ __weak int ls_board_early_init_f(void)
+ {
+@@ -411,6 +334,84 @@ void adjust_nand_pagesize(void)
+ #endif
+ 
+ #ifndef CONFIG_SPL_BUILD
++
++/*
++ * display uboot version info on lcd
++ * if you make with -DDISPLAY_BANNER_ON_VIDCONSOLE it will
++ * display it on lcd
++ */
++static int vidconsole_notice(char *buf)
++{
++#if defined(CONFIG_VIDEO) && defined(CONFIG_LOONGSON_VIDCONSOLE_NOTICE)
++	struct vidconsole_priv *priv;
++	struct udevice *con, *vdev = NULL;
++	int col, row, len;
++	int vidcon_id = 0;
++	for (uclass_first_device(UCLASS_VIDEO, &vdev);
++				vdev; uclass_next_device(&vdev)) {
++		debug("video device: %s\n", vdev->name);
++		vidcon_id++;
++	}
++
++	if (vidcon_id < 1) {
++		debug("vidconsole no exist\n");
++		sprintf(buf, "Press %s, %s", NOTICE_STR1, NOTICE_STR2);
++		return 0;
++	}
++
++	for (uclass_first_device(UCLASS_VIDEO_CONSOLE, &con);
++				con; uclass_next_device(&con)) {
++		vidconsole_put_string(con, ANSI_CURSOR_SAVE);
++		priv = dev_get_uclass_priv(con);
++		row = priv->rows - 1;
++#ifdef DISPLAY_BANNER_ON_VIDCONSOLE
++		display_options_get_banner(false, buf, DISPLAY_OPTIONS_BANNER_LENGTH);
++		len = strcspn(buf, "\n");
++		buf[len] = 0;
++		col = (priv->cols / 2) - (len / 2);
++		if (col < 0)
++			col = 0;
++		vidconsole_position_cursor(con, col, row);
++		vidconsole_put_string(con, buf);
++		row -= 1;
++#endif
++		sprintf(buf, "Press %s, %s", NOTICE_STR1, NOTICE_STR2);
++		len = strlen(buf);
++		col = (priv->cols / 2) - (len / 2);
++		if (col < 0)
++			col = 0;
++		vidconsole_position_cursor(con, col, row);
++		vidconsole_put_string(con, buf);
++		vidconsole_position_cursor(con, 0, 0);
++		vidconsole_put_string(con, ANSI_CURSOR_RESTORE);
++	}
++#else
++	sprintf(buf, "Press %s, %s", NOTICE_STR1, NOTICE_STR2);
++#endif
++	return 0;
++}
++
++static void print_notice(void)
++{
++	char notice[DISPLAY_OPTIONS_BANNER_LENGTH];
++
++	if (vidconsole_notice(notice))
++		sprintf(notice, "Press %s, %s", NOTICE_STR1, NOTICE_STR2);
++
++	printf("************************** Notice **************************\n");
++	printf("%s\r\n", notice);
++	printf("************************************************************\n");
++}
++
++static void loongson_env_trigger(void)
++{
++	run_command("loongson_env_trigger init", 0);
++	run_command("loongson_env_trigger ls_trigger_u_kernel", 0);
++	run_command("loongson_env_trigger ls_trigger_u_rootfs", 0);
++	run_command("loongson_env_trigger ls_trigger_u_uboot", 0);
++	run_command("loongson_env_trigger ls_trigger_boot", 0);
++}
++
+ int last_stage_init(void)
+ {
+ 	print_notice();
+diff --git a/board/loongson/ls2k0300/ls2k0300.c b/board/loongson/ls2k0300/ls2k0300.c
+index 990ea5ee..68d300d1 100644
+--- a/board/loongson/ls2k0300/ls2k0300.c
++++ b/board/loongson/ls2k0300/ls2k0300.c
+@@ -24,7 +24,6 @@ void loop_delay(unsigned long long loops)
+ static void ls2k0300_usb_phy_init(unsigned long long base, int sel)
+ {
+ 	unsigned int val;
+-	int i;
+ 
+ 	readl(base + 0x11c) &= ~(1 << (8 + sel));
+ 	readl(base + 0x11c) |=  (1 <<  7);
+diff --git a/cmd/elf.c b/cmd/elf.c
+index 2e0c52ee..e618b3e0 100644
+--- a/cmd/elf.c
++++ b/cmd/elf.c
+@@ -21,8 +21,8 @@
+ #endif
+ 
+ /* Allow ports to override the default behavior */
+-static unsigned long do_bootelf_exec(ulong (*entry)(int, char * const[], char * const[]
+-, char * const[]),int argc, char *const argv[], char *const argv1[], char *const argv2[])
++static unsigned long do_bootelf_exec(ulong (*entry)(int, char *const[], char *const[], char *const[]),
++									 int argc, char *const argv[], char *const argv1[], char *const argv2[])
+ {
+ 	unsigned long ret;
+ 
+@@ -35,6 +35,8 @@ static unsigned long do_bootelf_exec(ulong (*entry)(int, char * const[], char *
+ 	return ret;
+ }
+ 
++extern void *build_boot_param(void);
++
+ /* Interpreter command to boot an arbitrary ELF image from memory */
+ int do_bootelf(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
+ {
+@@ -76,11 +78,13 @@ int do_bootelf(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
+ 		return rcode;
+ 
+ 	printf("## Starting application at 0x%08lx ...\n", addr);
+-	
++
++#if defined(CONFIG_LOONGSON_BOOT_FIXUP)
+ 	bootparam = build_boot_param();
+ 	fw_arg2 = *(unsigned long long *)(bootparam + 8);
+ 	fw_arg3 = 0;
+ 	flush();
++#endif
+ 
+ 	/*
+ 	 * pass address parameter as argv[0] (aka command name),
+diff --git a/common/autoboot.c b/common/autoboot.c
+index 3328b440..34cdaa88 100644
+--- a/common/autoboot.c
++++ b/common/autoboot.c
+@@ -484,6 +484,9 @@ const char *bootdelay_process(void)
+ 	return s;
+ }
+ 
++extern void autoboot_failed_custom_handle(const char* s);
++extern void custom_abort_key_handle(int abort);
++
+ void autoboot_command(const char *s)
+ {
+ 	debug("### main_loop: bootcmd=\"%s\"\n", s ? s : "<UNDEFINED>");
+diff --git a/configs/loongson_2k0300_defconfig b/configs/loongson_2k0300_defconfig
+index 8757784b..9111818d 100644
+--- a/configs/loongson_2k0300_defconfig
++++ b/configs/loongson_2k0300_defconfig
+@@ -288,7 +288,7 @@ CONFIG_DEFAULT_FDT_FILE=""
+ #
+ CONFIG_MENU=y
+ # CONFIG_CONSOLE_RECORD is not set
+-CONFIG_SYS_CBSIZE=1024
++CONFIG_SYS_CBSIZE=4096
+ CONFIG_SYS_PBSIZE=1044
+ # CONFIG_DISABLE_CONSOLE is not set
+ CONFIG_LOGLEVEL=7
+@@ -376,7 +376,7 @@ CONFIG_SPL_FRAMEWORK=y
+ # CONFIG_SPL_FRAMEWORK_BOARD_INIT_F is not set
+ CONFIG_SPL_SIZE_LIMIT_SUBTRACT_GD=y
+ CONFIG_SPL_SIZE_LIMIT_SUBTRACT_MALLOC=y
+-CONFIG_SPL_MAX_SIZE=0x0
++CONFIG_SPL_MAX_SIZE=0x00040000
+ CONFIG_SPL_PAD_TO=0x0
+ # CONFIG_SPL_HAS_BSS_LINKER_SECTION is not set
+ # CONFIG_SPL_NO_BSS_LIMIT is not set
+@@ -453,7 +453,7 @@ CONFIG_CMDLINE_EDITING=y
+ CONFIG_AUTO_COMPLETE=y
+ CONFIG_SYS_LONGHELP=y
+ CONFIG_SYS_PROMPT="SOC#"
+-CONFIG_SYS_MAXARGS=64
++CONFIG_SYS_MAXARGS=32
+ CONFIG_SYS_XTRACE=y
+ 
+ #
+diff --git a/drivers/gpio/ls_gpio.c b/drivers/gpio/ls_gpio.c
+index 44aa771a..c33b587e 100644
+--- a/drivers/gpio/ls_gpio.c
++++ b/drivers/gpio/ls_gpio.c
+@@ -172,7 +172,7 @@ static int ls_gpio_bind(struct udevice *parent)
+ 	/* If this is a child device, there is nothing to do here */
+ 	if (plat)
+ 		return 0;
+-	membase = PHYS_TO_UNCACHED((phys_addr_t)dev_read_addr(parent));
++	membase = (void *)PHYS_TO_UNCACHED((phys_addr_t)dev_read_addr(parent));
+ 	if (!membase)
+ 		return -EINVAL;
+ 
+diff --git a/drivers/i2c/lsfs_i2c.c b/drivers/i2c/lsfs_i2c.c
+index 0206b76f..4af3ad9c 100644
+--- a/drivers/i2c/lsfs_i2c.c
++++ b/drivers/i2c/lsfs_i2c.c
+@@ -381,7 +381,7 @@ static int lsfs_i2c_probe(struct udevice *bus)
+ {
+ 	struct ls_i2c_dev *i2c_dev = dev_get_priv(bus);
+ 
+-	i2c_dev->base =  PHYS_TO_UNCACHED(dev_read_addr_ptr(bus));
++	i2c_dev->base =  (void *)PHYS_TO_UNCACHED(dev_read_addr_ptr(bus));
+ 	i2c_dev->speed = LS_I2C_SPEED_STANDARD;
+ 	ls_i2c_hw_config(i2c_dev);
+ 	return 0;
+diff --git a/drivers/ram/loongson/ls_ddr4.c b/drivers/ram/loongson/ls_ddr4.c
+index a6674734..6224273e 100644
+--- a/drivers/ram/loongson/ls_ddr4.c
++++ b/drivers/ram/loongson/ls_ddr4.c
+@@ -7,6 +7,7 @@
+ #include <config.h>
+ #include <stdio.h>
+ #include "ls_addr4.h"
++#include "mem_ctrl.h"
+ #include <spl.h>
+ #include <image.h>
+ 
+@@ -78,13 +79,14 @@ uint64_t get_hex(void)
+ 	}
+ }
+ 
++extern unsigned int spl_get_uboot_offs(void);
++
+ void mm_feature_init(void)
+ {
+ 
+-	u8 * imgaddr;
+-	u8 date_u8[4],i;
++	u8 *imgaddr;
++	u8 date_u8[4], i;
+ 	u32 magic;
+-	struct spl_image_info *spl_image;
+ 	size_t size = 0x40,size_offset = 12;
+ 	ulong payload_offs, payload_end;
+ 	long long dimm_info_in_flash_offs;
+@@ -93,14 +95,14 @@ void mm_feature_init(void)
+ 	for(i = 0;i < 4; i++) {
+ 		date_u8[i] = *(imgaddr+i);
+ 	}
+-	magic = (date_u8[0]<<24) | (date_u8[1]<<16) | (date_u8[2]<<8) | date_u8[3];
++	magic = (date_u8[0] << 24) | (date_u8[1] << 16) | (date_u8[2] << 8) | date_u8[3];
+ 	if(magic == IH_MAGIC) {
+ 	
+ 		for(i = size_offset;i < 16; i++) {
+ 			date_u8[i-size_offset] = *(imgaddr+i);
+ 		}
+-		payload_end = (date_u8[0]<<24) | (date_u8[1]<<16) | (date_u8[2]<<8) | date_u8[3] + size;
+-		dimm_info_in_flash_offs = 	map_sysmem(BOOT_SPACE_BASE + payload_offs + payload_end, 0);
++		payload_end = ((date_u8[0] << 24) | (date_u8[1] << 16) | (date_u8[2] << 8) | date_u8[3]) + size;
++		dimm_info_in_flash_offs = (long long)map_sysmem(BOOT_SPACE_BASE + payload_offs + payload_end, 0);
+ 		dimm_info_in_flash_offs = (dimm_info_in_flash_offs & 0xfffff000) + 0x1000;
+ 	}
+ 	else
+@@ -275,30 +277,30 @@ void mm_feature_init(void)
+ 	mm_ctrl_info.paster.mc1_row_num			= MC1_ROW_NUM;
+ 	mm_ctrl_info.paster.mc1_addr_mirror		= MC1_ADDR_MIRROR;
+ 	mm_ctrl_info.paster.mc1_bg_mirror		= MC1_BG_MIRROR;
+-	mm_ctrl_info.param_reg_array			= &param_info;
++	mm_ctrl_info.param_reg_array			= &param_info[0];
+ }
+ 
+-void print_mm_ctrl()
++void print_mm_ctrl(void)
+ {
+ 	printf("=================================================================================\n");
+-	printf(" mc_type:%u\n",						 mm_ctrl_info.mc_type);
++	printf(" mc_type:%u\n",                          mm_ctrl_info.mc_type);
+ 	printf(" mc_regs_base:%llu\n",                   mm_ctrl_info.mc_regs_base);
+ 	printf(" cache_mem_base:%llu\n",                 mm_ctrl_info.cache_mem_base);
+ 	printf(" mem_base:%llu\n",                       mm_ctrl_info.mem_base);
+-	printf(" ddr_freq:%lu\n",                       mm_ctrl_info.ddr_freq);
+-	printf(" ddr_freq_2slot:%lu\n",                 mm_ctrl_info.ddr_freq_2slot);
+-	printf(" dimm_info_in_flash_offset:%lu\n",      mm_ctrl_info.dimm_info_in_flash_offset);
+-	printf(" sameba_adj:%lu\n",                     mm_ctrl_info.sameba_adj);
+-	printf(" samebg_adj:%lu\n",                     mm_ctrl_info.samebg_adj);
+-	printf(" samec_adj:%lu\n",                      mm_ctrl_info.samec_adj);
+-	printf(" samecs_adj:%lu\n",                     mm_ctrl_info.samecs_adj);
+-	printf(" diffcs_adj:%lu\n",                     mm_ctrl_info.diffcs_adj);
++	printf(" ddr_freq:%llu\n",                       mm_ctrl_info.ddr_freq);
++	printf(" ddr_freq_2slot:%llu\n",                 mm_ctrl_info.ddr_freq_2slot);
++	printf(" dimm_info_in_flash_offset:%llu\n",      mm_ctrl_info.dimm_info_in_flash_offset);
++	printf(" sameba_adj:%llu\n",                     mm_ctrl_info.sameba_adj);
++	printf(" samebg_adj:%llu\n",                     mm_ctrl_info.samebg_adj);
++	printf(" samec_adj:%llu\n",                      mm_ctrl_info.samec_adj);
++	printf(" samecs_adj:%llu\n",                     mm_ctrl_info.samecs_adj);
++	printf(" diffcs_adj:%llu\n",                     mm_ctrl_info.diffcs_adj);
+ 	printf(" mc_interleave_offset:%llu\n",           mm_ctrl_info.mc_interleave_offset);
+-	printf(" ref_clk:%u\n",                        mm_ctrl_info.ref_clk);
+-	printf("node_offset:%u\n",                     mm_ctrl_info.node_offset);
+-	printf("tot_node_num:%u\n",                    mm_ctrl_info.tot_node_num);
+-	printf("channel_width:%u\n",                   mm_ctrl_info.channel_width);
+-	printf("dll_bypass:%u\n",                      mm_ctrl_info.dll_bypass);
++	printf(" ref_clk:%u\n",                          mm_ctrl_info.ref_clk);
++	printf(" node_offset:%u\n",                      mm_ctrl_info.node_offset);
++	printf(" tot_node_num:%u\n",                     mm_ctrl_info.tot_node_num);
++	printf(" channel_width:%u\n",                    mm_ctrl_info.channel_width);
++	printf(" dll_bypass:%u\n",                       mm_ctrl_info.dll_bypass);
+ 	printf("=================================================================================\n");
+ }
+ 
+@@ -513,7 +515,6 @@ static int ls_ddr_probe(struct udevice *dev)
+ 	ddr4_init(TOT_NODE_NUM, &mm_ctrl_info);
+ 	// mc->mm_ctrl_info = &mm_ctrl_info;
+ 	mc->info.size = MC0_MEMSIZE * 1024 * 1024;
+-#else
+ 	printf("%ld MiB\n", mc->info.size >> 20); // 这里是 DRAM: 打印之后输出 这里可以把全部的内存大小打印出来
+ #endif
+ 
+diff --git a/drivers/rtc/ls_rtc.c b/drivers/rtc/ls_rtc.c
+index 6a75b7bd..601a1ba3 100644
+--- a/drivers/rtc/ls_rtc.c
++++ b/drivers/rtc/ls_rtc.c
+@@ -114,9 +114,9 @@ static int ls_rtc_reset(struct udevice *dev)
+ static int ls_rtc_probe(struct udevice *dev)
+ {
+ 	unsigned int reg_val;
+-	rtc_reg_base = PHYS_TO_UNCACHED((phys_addr_t)dev_read_addr(dev));
++	rtc_reg_base = (void *)PHYS_TO_UNCACHED((phys_addr_t)dev_read_addr(dev));
+ 
+-	if (rtc_reg_base == FDT_ADDR_T_NONE)
++	if (rtc_reg_base == (void *)FDT_ADDR_T_NONE)
+ 		return -EINVAL;
+ 	/* enable rtc */
+ 	reg_val = rtc_read(RTC_CTRL_REG);
+diff --git a/drivers/usb/host/ehci.h b/drivers/usb/host/ehci.h
+index 5770d35b..d28f2332 100644
+--- a/drivers/usb/host/ehci.h
++++ b/drivers/usb/host/ehci.h
+@@ -295,5 +295,8 @@ int ehci_register(struct udevice *dev, struct ehci_hccr *hccr,
+ int ehci_deregister(struct udevice *dev);
+ extern struct dm_usb_ops ehci_usb_ops;
+ 
++int ehci_setup_phy(struct udevice *dev, struct phy *phy, int index);
++int ehci_shutdown_phy(struct udevice *dev, struct phy *phy);
++
+ #include <linux/bitops.h>
+ #endif /* USB_EHCI_H */
+diff --git a/drivers/video/loongson_fb.c b/drivers/video/loongson_fb.c
+index 8a6227b1..8c56c90e 100644
+--- a/drivers/video/loongson_fb.c
++++ b/drivers/video/loongson_fb.c
+@@ -367,9 +367,9 @@ static int ls_dc_init(struct ls_video_priv *priv)
+ 
+ static int ls_read_edid(struct ls_video_priv *priv, int block, u8 *buf)
+ {
+-	int shift = block * EDID_SIZE;
+-	struct udevice *chip;
+-	int ret;
++	// int shift = block * EDID_SIZE;
++	// struct udevice *chip;
++	// int ret;
+ #ifdef CONFIG_VIDEO_BRIDGE
+ 	if (priv->conn_type == LS_CONNECTOR_BRIDGE) {
+ 		ret = video_bridge_read_edid(priv->connector, buf, EDID_SIZE);
+diff --git a/include/configs/loongson_2k0300.h b/include/configs/loongson_2k0300.h
+index f4b0323e..80da35f6 100644
+--- a/include/configs/loongson_2k0300.h
++++ b/include/configs/loongson_2k0300.h
+@@ -33,7 +33,6 @@
+ #define CONFIG_SYS_MONITOR_BASE		CONFIG_TEXT_BASE
+ 
+ #ifdef CONFIG_SPL_BUILD
+-#define CONFIG_SPL_MAX_SIZE			SZ_256K
+ #define CONFIG_SPL_STACK			0x9000000090040000
+ #endif
+ 
+@@ -44,14 +43,8 @@
+ #define CONFIG_SYS_SDIO_CLK			(APB_FREQ * 1000000)	// CLK_in: 100MHz
+ #define CONFIG_SYS_DC_CLK			(REF_FREQ * 1000000)	// CLK_in: 100MHz
+ 
+-#define CONFIG_SYS_CBSIZE	4096		/* Console I/O buffer size */
+-#define CONFIG_SYS_MAXARGS	32		/* Max number of command args */
+ #define CONFIG_SYS_BARGSIZE	CONFIG_SYS_CBSIZE 	/* Boot argument buffer size */
+ 
+-
+-/* Miscellaneous configuration options */
+-#define CONFIG_SYS_BOOTM_LEN		(128 << 20)
+-
+ /* Environment settings */
+ // #define CONFIG_ENV_SIZE			0x4000	/* 16KB */
+ #ifdef CONFIG_ENV_IS_IN_SPI_FLASH
+@@ -70,7 +63,6 @@
+ 
+ /* OHCI configuration */
+ #ifdef CONFIG_USB_OHCI_HCD
+-#define CONFIG_USB_OHCI_NEW
+ #define CONFIG_SYS_USB_OHCI_MAX_ROOT_PORTS	1
+ #endif
+ 
+-- 
+2.52.0
+
