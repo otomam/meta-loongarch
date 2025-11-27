@@ -1,6 +1,6 @@
-From 1582a25451d487b69322f75a33b5bebb4e22687b Mon Sep 17 00:00:00 2001
+From 7e636f6d97063b0a3019c623d000c68fe6ac3651 Mon Sep 17 00:00:00 2001
 From: oto <oto102079@gmail.com>
-Date: Sun, 23 Nov 2025 11:01:34 +0800
+Date: Wed, 26 Nov 2025 22:42:13 +0800
 Subject: [PATCH] boot fitimage
 
 ---
@@ -25,7 +25,8 @@ Subject: [PATCH] boot fitimage
  drivers/usb/host/ehci.h                       |   3 +
  drivers/video/loongson_fb.c                   |   6 +-
  include/configs/loongson_2k0300.h             |   8 -
- 21 files changed, 175 insertions(+), 165 deletions(-)
+ include/configs/loongson_common.h             |   2 +
+ 22 files changed, 177 insertions(+), 165 deletions(-)
 
 diff --git a/arch/loongarch/cpu/start.S b/arch/loongarch/cpu/start.S
 index 05616f8e..0a66ce20 100644
@@ -831,6 +832,19 @@ index f4b0323e..80da35f6 100644
  #define CONFIG_SYS_USB_OHCI_MAX_ROOT_PORTS	1
  #endif
  
+diff --git a/include/configs/loongson_common.h b/include/configs/loongson_common.h
+index ca6628dc..e4960cc5 100644
+--- a/include/configs/loongson_common.h
++++ b/include/configs/loongson_common.h
+@@ -130,6 +130,8 @@ boot"
+ 	"rd_size=" __stringify(RD_SIZE) "\0" 					\
+ 	"mtdids=" CONFIG_MTDIDS_DEFAULT "\0"					\
+ 	"mtdparts=" CONFIG_MTDPARTS_DEFAULT "\0"				\
++	"bootargs=root=/dev/mmcblk0p1 rw rootwait earlycon console=ttyS0,115200n8\0"	\
++	"initrd_high=0xffffffffffffffff\0" \
+ 	"splashpos=m,m\0" \
+ 	"panel=default\0" \
+ 	"rotate=0\0" \
 -- 
 2.52.0
 
