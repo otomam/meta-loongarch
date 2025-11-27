@@ -1,12 +1,13 @@
-From 66f75ca7de98a8ba15e30151dc5fddaef8479ca2 Mon Sep 17 00:00:00 2001
+From 68f0ea89c91b293a649ac91135708e3ea774496d Mon Sep 17 00:00:00 2001
 From: oto <oto102079@gmail.com>
-Date: Sun, 23 Nov 2025 12:12:47 +0800
+Date: Thu, 27 Nov 2025 23:45:27 +0800
 Subject: [PATCH] fit image pass dtb
 
 ---
- arch/loongarch/kernel/efi.c   | 3 +++
- arch/loongarch/kernel/setup.c | 4 ++++
- 2 files changed, 7 insertions(+)
+ arch/loongarch/kernel/efi.c   |  3 +++
+ arch/loongarch/kernel/env.c   | 22 ++++++++++++++--------
+ arch/loongarch/kernel/setup.c |  4 ++++
+ 3 files changed, 21 insertions(+), 8 deletions(-)
 
 diff --git a/arch/loongarch/kernel/efi.c b/arch/loongarch/kernel/efi.c
 index 000825406..357f3c3da 100644
@@ -22,8 +23,50 @@ index 000825406..357f3c3da 100644
  	if (!efi_enabled(EFI_BOOT) || !efi_systab->runtime)
  		return;
  
+diff --git a/arch/loongarch/kernel/env.c b/arch/loongarch/kernel/env.c
+index 2f1f5b086..0f6aef2be 100644
+--- a/arch/loongarch/kernel/env.c
++++ b/arch/loongarch/kernel/env.c
+@@ -10,6 +10,7 @@
+ #include <linux/export.h>
+ #include <linux/memblock.h>
+ #include <linux/of_clk.h>
++#include <linux/of_fdt.h>
+ #include <asm/early_ioremap.h>
+ #include <asm/bootinfo.h>
+ #include <asm/loongson.h>
+@@ -25,16 +26,21 @@ void __init init_environ(void)
+ 	int efi_boot = fw_arg0;
+ 	char *cmdline = early_memremap_ro(fw_arg1, COMMAND_LINE_SIZE);
+ 
+-	if (efi_boot)
+-		set_bit(EFI_BOOT, &efi.flags);
+-	else
++	if ((*(uint32_t *)cmdline) == cpu_to_be32(OF_DT_HEADER)) {
+ 		clear_bit(EFI_BOOT, &efi.flags);
+-
+-	strscpy(boot_command_line, cmdline, COMMAND_LINE_SIZE);
+-	strscpy(init_command_line, cmdline, COMMAND_LINE_SIZE);
++		efi_system_table = 0;
++	} else {
++		if (efi_boot)
++			set_bit(EFI_BOOT, &efi.flags);
++		else
++			clear_bit(EFI_BOOT, &efi.flags);
++
++		strscpy(boot_command_line, cmdline, COMMAND_LINE_SIZE);
++		strscpy(init_command_line, cmdline, COMMAND_LINE_SIZE);
++		
++		efi_system_table = fw_arg2;
++	}
+ 	early_memunmap(cmdline, COMMAND_LINE_SIZE);
+-
+-	efi_system_table = fw_arg2;
+ }
+ 
+ static int __init init_cpu_fullname(void)
 diff --git a/arch/loongarch/kernel/setup.c b/arch/loongarch/kernel/setup.c
-index 4ed745667..241e6616d 100644
+index 4ed745667..6387332ba 100644
 --- a/arch/loongarch/kernel/setup.c
 +++ b/arch/loongarch/kernel/setup.c
 @@ -281,12 +281,16 @@ static void __init fdt_setup(void)
