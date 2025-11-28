@@ -1,13 +1,12 @@
-From 7e636f6d97063b0a3019c623d000c68fe6ac3651 Mon Sep 17 00:00:00 2001
+From 1bf6682021ae2d37de5b83cd3d0753b1ab564b40 Mon Sep 17 00:00:00 2001
 From: oto <oto102079@gmail.com>
-Date: Wed, 26 Nov 2025 22:42:13 +0800
+Date: Fri, 28 Nov 2025 22:07:28 +0800
 Subject: [PATCH] boot fitimage
 
 ---
  arch/loongarch/cpu/start.S                    |  49 +++---
- arch/loongarch/include/asm/io.h               |   2 +
  arch/loongarch/include/asm/loongarch.h        |   6 +-
- arch/loongarch/lib/bootm.c                    |  12 +-
+ arch/loongarch/lib/bootm.c                    |  18 +-
  .../ls2k0300/clksetting_2k0300.S              |   6 +-
  .../mach-loongson/ls2k0300/lowlevel_init.S    |   5 +-
  arch/loongarch/mach-loongson/spl.c            |   4 +-
@@ -25,8 +24,8 @@ Subject: [PATCH] boot fitimage
  drivers/usb/host/ehci.h                       |   3 +
  drivers/video/loongson_fb.c                   |   6 +-
  include/configs/loongson_2k0300.h             |   8 -
- include/configs/loongson_common.h             |   2 +
- 22 files changed, 177 insertions(+), 165 deletions(-)
+ include/configs/loongson_common.h             |   1 +
+ 21 files changed, 179 insertions(+), 166 deletions(-)
 
 diff --git a/arch/loongarch/cpu/start.S b/arch/loongarch/cpu/start.S
 index 05616f8e..0a66ce20 100644
@@ -146,19 +145,6 @@ index 05616f8e..0a66ce20 100644
  	bl		board_init_f_alloc_reserve
  	bl		board_init_f_init_reserve
  
-diff --git a/arch/loongarch/include/asm/io.h b/arch/loongarch/include/asm/io.h
-index 2b9b27f3..262e2067 100644
---- a/arch/loongarch/include/asm/io.h
-+++ b/arch/loongarch/include/asm/io.h
-@@ -20,6 +20,8 @@ static inline void sync(void)
- 
- #ifdef CONFIG_ARCH_MAP_SYSMEM
- 
-+extern void *map_sysmem_mach(phys_addr_t paddr, unsigned long len);
-+
- static __always_inline void *map_sysmem(phys_addr_t paddr, unsigned long len)
- {
- 	if (VA_TO_PHYS(paddr) >= (unsigned long)BOOT_SPACE_BASE &&
 diff --git a/arch/loongarch/include/asm/loongarch.h b/arch/loongarch/include/asm/loongarch.h
 index 835c7814..ff217815 100644
 --- a/arch/loongarch/include/asm/loongarch.h
@@ -187,7 +173,7 @@ index 835c7814..ff217815 100644
  #define  MCSR24_MCSRLOCK_SHIFT		0
  #define  MCSR24_MCSRLOCK		(_ULCAST_(1) << MCSR24_MCSRLOCK_SHIFT)
 diff --git a/arch/loongarch/lib/bootm.c b/arch/loongarch/lib/bootm.c
-index c852a229..6dd00cb5 100644
+index c852a229..a93214c7 100644
 --- a/arch/loongarch/lib/bootm.c
 +++ b/arch/loongarch/lib/bootm.c
 @@ -14,6 +14,7 @@
@@ -223,7 +209,20 @@ index c852a229..6dd00cb5 100644
  			if (bootargs)
  				sprintf(linux_command_line, "%s rd_start=0x%016llX rd_size=0x%lX", bootargs, (long long)(long)rd_start, rd_size);
  			else
-@@ -135,8 +134,7 @@ static void boot_jump_linux(struct bootm_headers *images)
+@@ -127,7 +126,11 @@ static void boot_jump_linux(struct bootm_headers *images)
+ 
+ 	bootparam = build_boot_param();
+ 	fw_arg2 = *(unsigned long long *)(bootparam + 8);
+-	fw_arg3 = 0;
++	if (images->ft_len) {
++		fw_arg3 = (void *)images->ft_addr;
++	} else {
++		fw_arg3 = (void *)0;
++	}
+ 
+ 	kernel(0, (ulong)linux_command_line, (ulong)fw_arg2,
+ 			(ulong)fw_arg3);
+@@ -135,8 +138,7 @@ static void boot_jump_linux(struct bootm_headers *images)
  	if (images->ft_len) {
  		kernel(-2, (ulong)images->ft_addr, 0, 0);
  	} else {
@@ -833,14 +832,13 @@ index f4b0323e..80da35f6 100644
  #endif
  
 diff --git a/include/configs/loongson_common.h b/include/configs/loongson_common.h
-index ca6628dc..e4960cc5 100644
+index ca6628dc..968c8ac2 100644
 --- a/include/configs/loongson_common.h
 +++ b/include/configs/loongson_common.h
-@@ -130,6 +130,8 @@ boot"
+@@ -130,6 +130,7 @@ boot"
  	"rd_size=" __stringify(RD_SIZE) "\0" 					\
  	"mtdids=" CONFIG_MTDIDS_DEFAULT "\0"					\
  	"mtdparts=" CONFIG_MTDPARTS_DEFAULT "\0"				\
-+	"bootargs=root=/dev/mmcblk0p1 rw rootwait earlycon console=ttyS0,115200n8\0"	\
 +	"initrd_high=0xffffffffffffffff\0" \
  	"splashpos=m,m\0" \
  	"panel=default\0" \
