@@ -8,6 +8,15 @@ LICENSE = "MIT"
 
 inherit core-image
 
+IMAGE_INSTALL += " \
+    wget \
+    mtd-utils \
+    mmc-utils \
+    e2fsprogs \
+    parted \
+    util-linux-lsblk \
+    "
+
 # IMAGE_FSTYPES += " wic"
 # WKS_FILE = "loongson2k0300.wks"
 

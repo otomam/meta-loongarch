@@ -20,8 +20,12 @@ SRCREV = "ace567fddffbeb902ba3742e67ecc957958ec949"
 
 SRC_URI = " \
             git://gitee.com/otomam/linux-loongson.git;protocol=https;branch=${KBRANCH} \
+           "
+
+SRC_URI:append:loongson-2k0300-99pai = " \
             file://fragment.cfg \
             file://0001-fit-image-pass-dtb.patch \
+            file://0001-disabled-otg.patch \
            "
 
 S = "${WORKDIR}/git"

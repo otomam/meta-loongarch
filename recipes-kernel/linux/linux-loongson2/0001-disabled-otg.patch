@@ -1,0 +1,25 @@
+From 56ffe6622589566674abceb2a45a08b2929d2216 Mon Sep 17 00:00:00 2001
+From: oto <oto102079@gmail.com>
+Date: Sat, 29 Nov 2025 21:00:09 +0800
+Subject: [PATCH] disabled otg
+
+---
+ arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts b/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
+index 4744ca0e1..bf47863b7 100644
+--- a/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
++++ b/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
+@@ -104,7 +104,7 @@
+ };
+ 
+ &otg {
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &i2c0 {
+-- 
+2.52.0
+

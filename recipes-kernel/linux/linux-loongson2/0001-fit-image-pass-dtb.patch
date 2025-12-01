@@ -57,7 +57,7 @@ index 4ed745667..4574bcdc7 100644
 -	if (!fdt_check_header(__dtb_start))
 +	if (fw_arg3 != 0)
 +		fdt_pointer = (void *)fw_arg3; // from u-boot
-+	else if (!fdt_check_header(__dtb_start))
++	else if (IS_ENABLED(CONFIG_BUILTIN_DTB) && !fdt_check_header(__dtb_start))
  		fdt_pointer = __dtb_start;
  	else
  		fdt_pointer = efi_fdt_pointer(); /* Fallback to firmware dtb */
