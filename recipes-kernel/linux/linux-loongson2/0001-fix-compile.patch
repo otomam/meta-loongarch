@@ -1,0 +1,24 @@
+From f8c2e7bff3c0154ab44bc19defabd7a463501058 Mon Sep 17 00:00:00 2001
+From: OpenEmbedded <oe.patch@oe>
+Date: Wed, 5 Aug 2026 13:16:35 +0800
+Subject: [PATCH] fix compile
+
+---
+ arch/loongarch/vdso/Makefile | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/loongarch/vdso/Makefile b/arch/loongarch/vdso/Makefile
+index 75c672638..2d78469af 100644
+--- a/arch/loongarch/vdso/Makefile
++++ b/arch/loongarch/vdso/Makefile
+@@ -18,6 +18,7 @@ ccflags-vdso := \
+ 	$(filter -march=%,$(KBUILD_CFLAGS)) \
+ 	$(filter -m%-float,$(KBUILD_CFLAGS)) \
+ 	$(CLANG_FLAGS) \
++	-std=gnu11 \
+ 	-D__VDSO__
+ 
+ cflags-vdso := $(ccflags-vdso) \
+-- 
+2.43.0
+

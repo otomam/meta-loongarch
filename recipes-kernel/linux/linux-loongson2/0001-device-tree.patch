@@ -1,0 +1,36 @@
+From 596b68c15882e66a6968924984bf3758b77d5b70 Mon Sep 17 00:00:00 2001
+From: OpenEmbedded <oe.patch@oe>
+Date: Wed, 5 Aug 2026 20:39:02 +0800
+Subject: [PATCH] device tree
+
+---
+ arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts b/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
+index 4744ca0e1..8ea8a7d4b 100644
+--- a/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
++++ b/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
+@@ -104,6 +104,10 @@
+ };
+ 
+ &otg {
++	dr_mode = "peripheral";
++	g-rx-fifo-size = <256>;
++	g-np-tx-fifo-size = <32>;
++	g-tx-fifo-size = <256 192 128 128 128>;
+ 	status = "okay";
+ };
+ 
+@@ -230,7 +234,7 @@
+ };
+ 
+ &dc{
+-	status = "okay";
++	status = "disabled";
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&lcd_pin_f0>,<&lcd_pin_f1>;
+ };
+-- 
+2.43.0
+

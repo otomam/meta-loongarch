@@ -7,16 +7,17 @@ PREFERRED_VERSION_u-boot = "2024.04"
 
 EXTRA_IMAGEDEPENDS += " u-boot "
 
-# INIT_MANAGER = "systemd"
+INIT_MANAGER = "systemd"
 
 # PREFERRED_PROVIDER_virtual/base-utils = "packagegroup-core-base-utils"
 # VIRTUAL-RUNTIME_base-utils = "packagegroup-core-base-utils"
 # VIRTUAL-RUNTIME_base-utils-hwclock = "util-linux-hwclock"
 # VIRTUAL-RUNTIME_base-utils-syslog = ""
 
-KERNEL_IMAGETYPE = "fitImage"
-KERNEL_IMAGETYPES = "${KERNEL_IMAGETYPE} "
-KERNEL_CLASSES = "kernel-fitimage"
+KERNEL_CLASSES += "kernel-fit-extra-artifacts"
+MACHINE_ESSENTIAL_EXTRA_RDEPENDS += "linux-yocto-fitimage"
+
+KERNEL_IMAGETYPE = "vmlinux"
 KERNEL_DEVICETREE = " \
     loongson_2k0300_99_pai_wifi.dtb \
     loongson_2k0300_99_pai_tfcard.dtb \
@@ -39,3 +40,9 @@ UBOOT_RD_ENTRYPOINT = "0x9000000006000000"
 IMAGE_FSTYPES = "tar.gz"
 
 SERIAL_CONSOLES ?= "115200;ttyS0"
+
+ERROR_QA:remove = "patch-status"
+
+DISTRO_FEATURES:remove = " 3g alsa bluetooth pulseaudio vulkan wayland x11 zeroconf ptest"
+
+EXTRA_IMAGE_FEATURES += "allow-empty-password empty-root-password allow-root-login"

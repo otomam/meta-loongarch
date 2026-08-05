@@ -1,0 +1,39 @@
+From 30f3c4cedd04b292b3e86989919e2796ee35466d Mon Sep 17 00:00:00 2001
+From: oto <oto102079@gmail.com>
+Date: Wed, 5 Aug 2026 20:40:58 +0800
+Subject: [PATCH] fitimage
+
+---
+ meta/classes-recipe/kernel-fit-image.bbclass | 2 ++
+ meta/lib/oe/fitimage.py                      | 2 +-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/meta/classes-recipe/kernel-fit-image.bbclass b/meta/classes-recipe/kernel-fit-image.bbclass
+index ae8f3c6688..e97014d052 100644
+--- a/meta/classes-recipe/kernel-fit-image.bbclass
++++ b/meta/classes-recipe/kernel-fit-image.bbclass
+@@ -80,6 +80,8 @@ python do_compile() {
+     )
+ 
+     # Prepare a kernel image section.
++    if d.getVar('UBOOT_ENTRYSYMBOL'):
++        shutil.copyfile(os.path.join(kernel_deploydir, "vmlinux"), "vmlinux")
+     shutil.copyfile(os.path.join(kernel_deploydir, "linux.bin"), "linux.bin")
+     with open(os.path.join(kernel_deploydir, "linux_comp")) as linux_comp_f:
+         linux_comp = linux_comp_f.read()
+diff --git a/meta/lib/oe/fitimage.py b/meta/lib/oe/fitimage.py
+index 881d0eae0a..a364df4daf 100644
+--- a/meta/lib/oe/fitimage.py
++++ b/meta/lib/oe/fitimage.py
+@@ -274,7 +274,7 @@ class ItsNodeRootKernel(ItsNode):
+             for line in result.stdout.splitlines():
+                 parts = line.split()
+                 if len(parts) == 3 and parts[2] == entrysymbol:
+-                    entrypoint = "<0x%s>" % parts[0]
++                    entrypoint = "0x%s" % parts[0]
+                     break
+         kernel_node = self.its_add_node_image(
+             kernel_id,
+-- 
+2.43.0
+

@@ -16,7 +16,7 @@ Subject: [PATCH] boot fitimage
  board/loongson/ls2k0300/ls2k0300.c            |   1 -
  cmd/elf.c                                     |  10 +-
  common/autoboot.c                             |   3 +
- configs/loongson_2k0300_defconfig             |   6 +-
+ configs/loongson_2k0300_defconfig             |  10 +-
  drivers/gpio/ls_gpio.c                        |   2 +-
  drivers/i2c/lsfs_i2c.c                        |   2 +-
  drivers/ram/loongson/ls_ddr4.c                |  47 +++---
@@ -25,7 +25,7 @@ Subject: [PATCH] boot fitimage
  drivers/video/loongson_fb.c                   |   6 +-
  include/configs/loongson_2k0300.h             |   8 -
  include/configs/loongson_common.h             |   1 +
- 21 files changed, 179 insertions(+), 166 deletions(-)
+ 21 files changed, 181 insertions(+), 168 deletions(-)
 
 diff --git a/arch/loongarch/cpu/start.S b/arch/loongarch/cpu/start.S
 index 05616f8e..0a66ce20 100644
@@ -173,7 +173,7 @@ index 835c7814..ff217815 100644
  #define  MCSR24_MCSRLOCK_SHIFT		0
  #define  MCSR24_MCSRLOCK		(_ULCAST_(1) << MCSR24_MCSRLOCK_SHIFT)
 diff --git a/arch/loongarch/lib/bootm.c b/arch/loongarch/lib/bootm.c
-index c852a229..a93214c7 100644
+index c852a229..c53dabfc 100644
 --- a/arch/loongarch/lib/bootm.c
 +++ b/arch/loongarch/lib/bootm.c
 @@ -14,6 +14,7 @@
@@ -591,7 +591,7 @@ index 3328b440..34cdaa88 100644
  {
  	debug("### main_loop: bootcmd=\"%s\"\n", s ? s : "<UNDEFINED>");
 diff --git a/configs/loongson_2k0300_defconfig b/configs/loongson_2k0300_defconfig
-index 8757784b..9111818d 100644
+index 8757784b..0c82e76f 100644
 --- a/configs/loongson_2k0300_defconfig
 +++ b/configs/loongson_2k0300_defconfig
 @@ -288,7 +288,7 @@ CONFIG_DEFAULT_FDT_FILE=""
@@ -621,6 +621,17 @@ index 8757784b..9111818d 100644
  CONFIG_SYS_XTRACE=y
  
  #
+@@ -722,8 +722,8 @@ CONFIG_CMD_FS_GENERIC=y
+ CONFIG_CMD_MTDPARTS=y
+ # CONFIG_CMD_MTDPARTS_SPREAD is not set
+ # CONFIG_CMD_MTDPARTS_SHOW_NET_SIZES is not set
+-CONFIG_MTDIDS_DEFAULT="nand0=ls-nand,nor0=spi0.0"
+-CONFIG_MTDPARTS_DEFAULT="ls-nand:14m(kernel),-(root);spi0.0:924k(uboot),32k(uboot_env),4k(bdinfo),64k(dtb)"
++CONFIG_MTDIDS_DEFAULT="nor0=spi0.0"
++CONFIG_MTDPARTS_DEFAULT="spi0.0:924k(uboot),32k(uboot_env),4k(bdinfo),64k(dtb)"
+ # CONFIG_CMD_REISER is not set
+ # CONFIG_CMD_ZFS is not set
+ 
 diff --git a/drivers/gpio/ls_gpio.c b/drivers/gpio/ls_gpio.c
 index 44aa771a..c33b587e 100644
 --- a/drivers/gpio/ls_gpio.c
@@ -844,5 +855,5 @@ index ca6628dc..968c8ac2 100644
  	"panel=default\0" \
  	"rotate=0\0" \
 -- 
-2.52.0
+2.43.0
 

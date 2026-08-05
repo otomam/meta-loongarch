@@ -9,7 +9,7 @@ require recipes-kernel/linux/linux-yocto.inc
 LINUX_VERSION_EXTENSION = ""
 LINUX_VERSION = "6.9"
 
-KERNEL_VERSION_SANITY_SKIP="1"
+KERNEL_VERSION_SANITY_SKIP = "1"
 
 COMPATIBLE_MACHINE = "^(loongson-2k0300-99pai)$"
 
@@ -25,7 +25,8 @@ SRC_URI = " \
 SRC_URI:append:loongson-2k0300-99pai = " \
             file://fragment.cfg \
             file://0001-fit-image-pass-dtb.patch \
-            file://0001-disabled-otg.patch \
+            file://0001-fix-compile.patch \
+            file://0001-device-tree.patch \
            "
 
 S = "${WORKDIR}/git"
