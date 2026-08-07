@@ -9,10 +9,9 @@ EXTRA_IMAGEDEPENDS += " u-boot "
 
 INIT_MANAGER = "systemd"
 
-# PREFERRED_PROVIDER_virtual/base-utils = "packagegroup-core-base-utils"
-# VIRTUAL-RUNTIME_base-utils = "packagegroup-core-base-utils"
-# VIRTUAL-RUNTIME_base-utils-hwclock = "util-linux-hwclock"
-# VIRTUAL-RUNTIME_base-utils-syslog = ""
+# 注释掉会编译不带initramfs的fitimage
+# INITRAMFS_IMAGE = "core-image-minimal-initramfs"
+# INIT_MANAGER = "mdev-busybox"
 
 KERNEL_CLASSES += "kernel-fit-extra-artifacts"
 MACHINE_ESSENTIAL_EXTRA_RDEPENDS += "linux-yocto-fitimage"
