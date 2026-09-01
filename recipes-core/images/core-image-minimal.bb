@@ -10,11 +10,21 @@ inherit core-image
 
 IMAGE_INSTALL += " \
     wget \
+    curl \
+    file \
+    ldd \
     mtd-utils \
     mmc-utils \
     e2fsprogs \
     parted \
+    ethtool \
+    iproute2 \
+    iproute2-ss \
     util-linux-lsblk \
+    util-linux-lscpu \
+    one-kvm \
+    ttyd \
+    dropbear \
     "
 
 # IMAGE_FSTYPES += " wic"
