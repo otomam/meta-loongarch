@@ -26,10 +26,9 @@ SRC_URI:append:loongson-2k0300-99pai = " \
             file://fragment.cfg \
             file://0001-fit-image-pass-dtb.patch \
             file://0001-fix-compile.patch \
-            file://0001-device-tree.patch \
+            file://0001-usb-otg.patch \
+            file://0001-sdio-wifi.patch \
            "
-
-S = "${WORKDIR}/git"
 
 PV = "6.9"
 PR = "r0"

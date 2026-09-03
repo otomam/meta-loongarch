@@ -25,6 +25,7 @@ IMAGE_INSTALL += " \
     one-kvm \
     ttyd \
     dropbear \
+    aic8800 \
     "
 
 # IMAGE_FSTYPES += " wic"

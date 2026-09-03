@@ -1,7 +1,7 @@
 From 596b68c15882e66a6968924984bf3758b77d5b70 Mon Sep 17 00:00:00 2001
 From: OpenEmbedded <oe.patch@oe>
 Date: Wed, 5 Aug 2026 20:39:02 +0800
-Subject: [PATCH] device tree
+Subject: [PATCH] usb otg
 
 ---
  arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts | 6 +++++-
