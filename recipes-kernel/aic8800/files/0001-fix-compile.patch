@@ -1,13 +1,15 @@
-From 1442a44a5fb5240797b335cbc451cf35571ad565 Mon Sep 17 00:00:00 2001
+From a21c82431b51da7f4a24fb467917657f34c614ae Mon Sep 17 00:00:00 2001
 From: oto <oto102079@gmail.com>
-Date: Thu, 3 Sep 2026 12:36:16 +0800
+Date: Thu, 3 Sep 2026 23:52:16 +0800
 Subject: [PATCH] fix compile
 
 ---
- Makefile                  | 6 +++---
- aic8800_fdrv/Makefile     | 2 +-
- aic8800_fdrv/rwnx_msg_rx.c     | 4 ++--
- 3 files changed, 6 insertions(+), 6 deletions(-)
+ Makefile                          | 6 +++---
+ aic8800_bsp/aic_bsp_main.c        | 2 +-
+ aic8800_fdrv/Makefile             | 2 +-
+ aic8800_fdrv/rwnx_main.c          | 2 +-
+ aic8800_fdrv/rwnx_msg_rx.c        | 4 ++--
+ 5 files changed, 8 insertions(+), 8 deletions(-)
 
 diff --git a/Makefile b/Makefile
 index 6f02ee9..d86e22c 100644
@@ -40,6 +42,19 @@ index 6f02ee9..d86e22c 100644
  
  uninstall:
  	rm -rfv $(MODDESTDIR)/aic8800_bsp.ko
+diff --git a/aic8800_bsp/aic_bsp_main.c b/aic8800_bsp/aic_bsp_main.c
+index 653a021..9a36d28 100644
+--- a/aic8800_bsp/aic_bsp_main.c
++++ b/aic8800_bsp/aic_bsp_main.c
+@@ -15,7 +15,7 @@
+ #define DRV_AUTHOR            "AICSemi"
+ #define DRV_VERS_MOD          "1.0"
+ 
+-int aicwf_dbg_level_bsp = LOGERROR|LOGINFO|LOGDEBUG|LOGTRACE;
++int aicwf_dbg_level_bsp = LOGERROR;
+ 
+ struct semaphore aicbsp_probe_semaphore;
+ 
 diff --git a/aic8800_fdrv/Makefile b/aic8800_fdrv/Makefile
 index 033b8b4..f08fdca 100644
 --- a/aic8800_fdrv/Makefile
@@ -53,6 +68,19 @@ index 033b8b4..f08fdca 100644
  
  ########## Platform support list ##########
  CONFIG_PLATFORM_ROCKCHIP ?= n
+diff --git a/aic8800_fdrv/rwnx_main.c b/aic8800_fdrv/rwnx_main.c
+index 1e2e73d..d24ce30 100644
+--- a/aic8800_fdrv/rwnx_main.c
++++ b/aic8800_fdrv/rwnx_main.c
+@@ -535,7 +535,7 @@ static const int rwnx_hwq2uapsd[NL80211_NUM_ACS] = {
+ 
+ 
+ extern uint8_t scanning;
+-int aicwf_dbg_level = LOGERROR|LOGINFO|LOGDEBUG|LOGTRACE|LOGFW;
++int aicwf_dbg_level = LOGERROR;
+ module_param(aicwf_dbg_level, int, 0660);
+ #ifdef CONFIG_DYNAMIC_PWR
+ int dynamic_pwr = 1;
 diff --git a/aic8800_fdrv/rwnx_msg_rx.c b/aic8800_fdrv/rwnx_msg_rx.c
 index a9ba841..858ca4f 100644
 --- a/aic8800_fdrv/rwnx_msg_rx.c

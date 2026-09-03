@@ -18,14 +18,12 @@ IMAGE_INSTALL += " \
     e2fsprogs \
     parted \
     ethtool \
-    iproute2 \
-    iproute2-ss \
-    util-linux-lsblk \
-    util-linux-lscpu \
-    one-kvm \
-    ttyd \
+    iproute2 iproute2-ss \
+    util-linux-lsblk util-linux-lscpu \
+    one-kvm ttyd \
     dropbear \
-    aic8800 \
+    aic8800 wpa-supplicant wireless-regdb iw \
+    kernel-module-cfg80211 kernel-module-rfkill \
     "
 
 # IMAGE_FSTYPES += " wic"

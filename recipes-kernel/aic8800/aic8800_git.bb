@@ -22,6 +22,6 @@ MODULES_INSTALL_TARGET = "install"
 
 do_install:append() {
     install -d ${D}/vendor/etc/firmware
-    cp -rf ${UNPACKDIR}/${BP}/src/SDIO/driver_fw/fw/aic8800D80 ${D}/vendor/etc/firmware
+    cp -f ${UNPACKDIR}/${BP}/src/SDIO/driver_fw/fw/aic8800D80/* ${D}/vendor/etc/firmware/
 }
 FILES:${PN} = " /vendor/etc/firmware "
