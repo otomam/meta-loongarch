@@ -22,8 +22,8 @@ IMAGE_INSTALL += " \
     util-linux-lsblk util-linux-lscpu \
     one-kvm ttyd \
     dropbear \
-    aic8800 wpa-supplicant wireless-regdb iw \
-    kernel-module-cfg80211 kernel-module-rfkill \
+    aic8800 wpa-supplicant wireless-regdb-static \
+    kernel-module-cfg80211 kernel-module-rfkill kernel-module-cfg80211 kernel-module-rfkill \
     "
 
 # IMAGE_FSTYPES += " wic"

@@ -22,6 +22,19 @@ git clone https://github.com/otomam/meta-loongarch.git -b walnascar
 git clone https://github.com/yoctoproject/poky.git -b walnascar
 ```
 
+```
+BBLAYERS ?= " \
+  /home/yocto/bitbake-builds/loongson/layers/openembedded-core/meta \
+  /home/yocto/bitbake-builds/loongson/layers/meta-yocto/meta-yocto-bsp \
+  /home/yocto/bitbake-builds/loongson/layers/meta-yocto/meta-poky \
+  /home/yocto/meta-openembedded/meta-oe \
+  /home/yocto/meta-openembedded/meta-python \
+  /home/yocto/meta-openembedded/meta-multimedia \
+  /home/yocto/meta-openembedded/meta-networking \
+  /home/yocto/meta-loongarch \
+  "
+```
+
 ### 2.构建
 #### a.配置构建环境
 ``` shell

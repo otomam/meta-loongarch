@@ -28,6 +28,7 @@ SRC_URI:append:loongson-2k0300-99pai = " \
             file://0001-fix-compile.patch \
             file://0001-usb-otg.patch \
             file://0001-sdio-wifi.patch \
+            file://0001-disable-debug-log.patch \
            "
 
 PV = "6.9"
