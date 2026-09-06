@@ -9,9 +9,8 @@ EXTRA_IMAGEDEPENDS += " u-boot "
 
 INIT_MANAGER = "systemd"
 
-# 注释掉会编译不带initramfs的fitimage
+# 放开注释会编译带initramfs的fitimage，用于第一次分区或者调试
 # INITRAMFS_IMAGE = "core-image-minimal-initramfs"
-# INIT_MANAGER = "mdev-busybox"
 
 KERNEL_CLASSES += "kernel-fit-extra-artifacts"
 MACHINE_ESSENTIAL_EXTRA_RDEPENDS += "linux-yocto-fitimage"
@@ -42,6 +41,6 @@ SERIAL_CONSOLES ?= "115200;ttyS0"
 
 ERROR_QA:remove = "patch-status"
 
-DISTRO_FEATURES:remove = " 3g alsa bluetooth pulseaudio vulkan wayland x11 zeroconf ptest"
+DISTRO_FEATURES:remove = " 3g alsa bluetooth pulseaudio vulkan wayland x11 ptest"
 
 EXTRA_IMAGE_FEATURES += "allow-empty-password empty-root-password allow-root-login"

@@ -7,6 +7,8 @@ inherit core-image
 # on the kernel image.
 PACKAGE_EXCLUDE = "kernel-image-*"
 
+IMAGE_LINGUAS = ""
+
 IMAGE_FSTYPES = "${INITRAMFS_FSTYPES}"
 IMAGE_NAME_SUFFIX ?= ""
 
@@ -18,10 +20,10 @@ PACKAGE_INSTALL = " \
     ${VIRTUAL-RUNTIME_login_manager} \
     ${VIRTUAL-RUNTIME_init_manager} \
     ${VIRTUAL-RUNTIME_dev_manager} \
-    wget \
-    mtd-utils \
-    mmc-utils \
-    e2fsprogs \
-    parted \
-    util-linux-lsblk \
+    curl lrzsz \
+    mmc-utils mtd-utils \
+    e2fsprogs-e2fsck e2fsprogs-mke2fs \
+    util-linux-lsblk util-linux-lscpu \
+    libubootenv-bin \
+    setup \
     "

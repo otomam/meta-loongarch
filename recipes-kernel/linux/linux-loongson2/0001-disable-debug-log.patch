@@ -1,0 +1,25 @@
+From a4a5a3a66ebca66c30128ae3ce5aee0199b5ec0d Mon Sep 17 00:00:00 2001
+From: oto <oto102079@gmail.com>
+Date: Fri, 4 Sep 2026 21:25:54 +0800
+Subject: [PATCH] disable debug log
+
+---
+ drivers/usb/Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/usb/Makefile b/drivers/usb/Makefile
+index eef735388..3b491b9ee 100644
+--- a/drivers/usb/Makefile
++++ b/drivers/usb/Makefile
+@@ -5,7 +5,7 @@
+ 
+ # Object files in subdirectories
+ 
+-subdir-ccflags-y                := -DDEBUG 
++# subdir-ccflags-y                := -DDEBUG 
+ 
+ obj-$(CONFIG_USB_COMMON)	+= common/
+ obj-$(CONFIG_USB)		+= core/
+-- 
+2.43.0
+

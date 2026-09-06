@@ -1,0 +1,1158 @@
+From 6b822b1faad6e65b14f9cae078192c0069ee7d1e Mon Sep 17 00:00:00 2001
+From: oto <oto102079@gmail.com>
+Date: Sun, 6 Sep 2026 20:12:14 +0800
+Subject: [PATCH] with standard spi flash
+
+---
+ .../boot/dts/loongson_2k0300_99_pai_wifi.dts  |  46 +-
+ drivers/mtd/spi-nor/controllers/Kconfig       |   6 +
+ drivers/mtd/spi-nor/controllers/ls-quadspi.c  | 901 +++++++++---------
+ 3 files changed, 452 insertions(+), 501 deletions(-)
+
+diff --git a/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts b/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
+index 8307a8e45..179ad4972 100644
+--- a/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
++++ b/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
+@@ -70,18 +70,6 @@
+ 	status = "okay";
+ };
+ 
+-&can2 {
+-	status = "okay";
+-	pinctrl-names = "default";
+-	pinctrl-0 = <&can2_mux_m0>;
+-};
+-
+-&can3 {
+-	status = "okay";
+-	pinctrl-names = "default";
+-	pinctrl-0 = <&can3_mux_m0>;
+-};
+-
+ &gmac0 {
+ 	status = "okay";
+ 	pinctrl-names = "default";
+@@ -155,13 +143,6 @@
+ 	};
+ };
+ 
+-&i2c1 {
+-	status = "okay";
+-	clock-frequency = <400000>;
+-	pinctrl-names = "default";
+-	pinctrl-0 = <&i2c1_mux_m0>;
+-};
+-
+ &i2c2 {
+ 	status = "okay";
+ 	pinctrl-names = "default";
+@@ -181,11 +162,11 @@
+ &spi0 {
+ 	status = "okay";
+ 	pinctrl-names = "default";
+-	pinctrl-0 = <&spi0_6bit_f0>,<&spi0_6bit_f1>;
++	pinctrl-0 = <&spi0_6bit_f0>;
+ 
+ 	norflash@0 {
+ 		reg = <0>;
+-		spi-rx-bus-width = <4>;
++		spi-rx-bus-width = <1>;
+ 		spi-max-frequency = <25000000>;
+ 		#address-cells = <1>;
+ 		#size-cells = <1>;
+@@ -194,20 +175,25 @@
+ 			#address-cells = <1>;
+ 			#size-cells = <1>;
+ 
+-			boot@0 {
+-				label = "boot";
+-				reg = <0x0000000 0x100000>;
++			uboot@0 {
++				label = "uboot";
++				reg = <0x00000000 0x000e7000>;
+ 				/*read-only;*/
+ 			};
+ 
+-			kernel@100000 {
+-				label = "kernel";
+-				reg = <0x100000 0x600000>;
++			uboot_env@e7000 {
++				label = "uboot_env";
++				reg = <0x000e7000 0x00008000>;
++			};
++
++			bdinfo@ef000 {
++				label = "bdinfo";
++				reg = <0x000ef000 0x00001000>;
+ 			};
+ 
+-			rootfs@700000 {
+-				label = "rootfs";
+-				reg = <0x700000 0x1000000>;
++			dtb@f0000 {
++				label = "dtb";
++				reg = <0x000f0000 0x00010000>;
+ 			};
+ 		};
+ 	};
+diff --git a/drivers/mtd/spi-nor/controllers/Kconfig b/drivers/mtd/spi-nor/controllers/Kconfig
+index ca45dcd3f..579d1b0df 100644
+--- a/drivers/mtd/spi-nor/controllers/Kconfig
++++ b/drivers/mtd/spi-nor/controllers/Kconfig
+@@ -16,3 +16,9 @@ config SPI_NXP_SPIFI
+ 	  SPIFI is a specialized controller for connecting serial SPI
+ 	  Flash. Enable this option if you have a device with a SPIFI
+ 	  controller and want to access the Flash as a mtd device.
++
++config SPI_LS_QUADSPI
++	tristate "Loongson SPI Controller Support"
++	depends on LOONGARCH
++	help
++	  This is the driver for Loongson spi master controller.
+diff --git a/drivers/mtd/spi-nor/controllers/ls-quadspi.c b/drivers/mtd/spi-nor/controllers/ls-quadspi.c
+index a26aeb833..6d9cafbfa 100644
+--- a/drivers/mtd/spi-nor/controllers/ls-quadspi.c
++++ b/drivers/mtd/spi-nor/controllers/ls-quadspi.c
+@@ -2,7 +2,7 @@
+  * Driver for loongson quadspi controller
+  *
+  * Copyright (C) 2024
+- * Author(s):  <zhaorui@loongson.cn>.
++ * Author(s): <zhaorui@loongson.cn>.
+  *
+  * License terms: GPL V2.0.
+  *
+@@ -18,6 +18,7 @@
+  * You should have received a copy of the GNU General Public License along with
+  * This program. If not, see <http://www.gnu.org/licenses/>.
+  */
++
+ #include <linux/clk.h>
+ #include <linux/errno.h>
+ #include <linux/io.h>
+@@ -35,593 +36,551 @@
+ #include <linux/sizes.h>
+ #include <linux/bsearch.h>
+ 
+-#define QSPI_CR				    0x0
+-#define QSPI_CSR			    0x1
+-#define QSPI_DR				    0x2
+-#define QSPI_SR				    0x3
+-#define QSPI_RSSR		            0xf
+-
+-/* QSPI CONFIG register*/
+-#define	QSPI_CR_DUXEN                       BIT(2)
+-#define QSPI_CR_QTYPE_SHIFET		    3
+-#define QSPI_CR_QTYPE_MASK		    GENMASK(4,3)
+-#define QSPI_CR_DUMMY			    BIT(5)
+-#define QSPI_CR_QMODE_SHIFET		    6
+-#define QSPI_CR_QMODE_MASK                  GENMASK(7, 6)
+-#define QSPI_CR_QMODE_1                     (0U << 3)
+-#define QSPI_CR_QMODE_2                     (1U << 3)
+-#define QSPI_CR_QMODE_4                     (2U << 3)
+-
+-/* QSPI CONFIG &STATUS register*/
+-#define QSPI_CSR_QBUSY			    BIT(2)
+-#define QSPI_CSR_QCS                        BIT(3)
+-#define QSPI_CSR_CLK_DIV_SHIFET             4
+-#define QSPI_CSR_CLK_DIV_MASK               GENMASK(7, 4)
+-
+-/* QSPI SWITCH register*/
+-#define QSPI_SR_SWITCH                      BIT(0)
+-
+-/* QSPI REGISERT SPACE SWITCH register*/
+-#define QSPI_RSSR_SPACE                     BIT(0)
+-
+-#define FMODE_INDW		    0U
+-#define FMODE_INDR		    1U
+-#define QSPI_BUSY_TIMEOUT_US        100000
+-#define LS_MAX_NORCHIP              1
++#define QSPI_CR       0x0
++#define QSPI_CSR      0x1
++#define QSPI_DR       0x2
++#define QSPI_SR       0x3
++#define QSPI_RSSR     0xf
++
++/* QSPI CONFIG register */
++/* FIX: Corrected spelling from SHIFET to SHIFT */
++#define QSPI_CR_QTYPE_SHIFT     3
++#define QSPI_CR_QTYPE_MASK      GENMASK(4, 3)
++#define QSPI_CR_DUMMY           BIT(5)
++/* FIX: Corrected spelling from SHIFET to SHIFT */
++#define QSPI_CR_QMODE_SHIFT     6
++#define QSPI_CR_QMODE_MASK      GENMASK(7, 6)
++
++/* FIX: Corrected logic. Shift 0 by 6, not 3. */
++#define QSPI_CR_QMODE_1         (0U << QSPI_CR_QMODE_SHIFT)
++#define QSPI_CR_QMODE_2         (1U << QSPI_CR_QMODE_SHIFT)
++#define QSPI_CR_QMODE_4         (2U << QSPI_CR_QMODE_SHIFT)
++
++/* QSPI CONFIG & STATUS register */
++#define QSPI_CSR_QBUSY          BIT(2)
++#define QSPI_CSR_QCS            BIT(3)
++/* FIX: Corrected spelling */
++#define QSPI_CSR_CLK_DIV_SHIFT  4
++#define QSPI_CSR_CLK_DIV_MASK   GENMASK(7, 4)
++
++/* QSPI SWITCH register */
++#define QSPI_SR_SWITCH          BIT(0)
++
++/* QSPI REGISTER SPACE SWITCH register */
++#define QSPI_RSSR_SPACE         BIT(0)
++
++#define FMODE_INDW              0U
++#define FMODE_INDR              1U
++#define QSPI_BUSY_TIMEOUT_US    100000
++#define LS_MAX_NORCHIP          1
+ 
+ struct ls_qspi_flash {
+-        struct spi_nor nor;
+-        struct ls_qspi *qspi;
+-        u32 cs;
+-        u32 presc;
+-        bool registered;
++    struct spi_nor nor;
++    struct ls_qspi *qspi;
++    u32 cs;
++    u32 presc; /* This holds the register value for divisor */
++    bool registered;
+ };
+ 
+ struct ls_qspi {
+-        struct device *dev;
+-        void __iomem *io_base;
+-        u32 nor_num;
+-        struct clk *clk;
+-        u32 clk_rate;
+-        struct ls_qspi_flash flash[LS_MAX_NORCHIP];
+-        struct completion cmd_completion;
+-
+-        /*
+-         * to protect device configuration, could be different between
+-         * 2 flash access (bk1, bk2)
+-         */
+-        struct mutex lock;
++    struct device *dev;
++    void __iomem *io_base;
++    u32 nor_num;
++    struct clk *clk;
++    u32 clk_rate;
++    struct ls_qspi_flash flash[LS_MAX_NORCHIP];
++    struct completion cmd_completion;
++    struct mutex lock;
+ };
+ 
+ struct ls_qspi_cmd {
+-        u8 addr_width;
+-        u8 dummy;
+-        bool tx_data;
+-        u8 opcode;
+-        u32 framemode;
+-        u32 qspimode;
+-        u32 addr;
+-        size_t len;
+-        void *buf;
++    u8 addr_width;
++    u8 dummy;
++    bool tx_data;
++    u8 opcode;
++    u32 framemode;
++    u32 qspimode;
++    u32 addr;
++    size_t len;
++    void *buf;
+ };
+ 
+-static struct spretoregs_t
+-{
+-        unsigned int spre;
+-        unsigned short div;
++/* Map: Hardware Divisor Value -> Register Setting */
++static struct spretoregs_t {
++    unsigned int spre; /* Divider */
++    unsigned short div; /* Register Value */
+ } spretoregs[] = {
+-	{2,0x0},
+-	{4,0x1},
+-	{16,0x2},
+-	{32,0x3},
+-	{8,0x4},
+-	{64,0x5},
+-	{128,0x6},
+-	{256,0x7},
+-	{512,0x8},
+-	{1024,0x9},
+-	{2048,0xa},
+-	{4096,0xb},
++    {2, 0x0}, {4, 0x1}, {8, 0x4}, {16, 0x2}, {32, 0x3}, {64, 0x5},
++    {128, 0x6}, {256, 0x7}, {512, 0x8}, {1024, 0x9}, {2048, 0xa}, {4096, 0xb},
+ };
+ 
+-static  inline void qspi_writeb(struct ls_qspi *qspi,unsigned short offset, u8  value)
++static inline void qspi_writeb(struct ls_qspi *qspi, unsigned short offset, u8 value)
+ {
+-        writeb(value,qspi->io_base+offset);
++    writeb(value, qspi->io_base + offset);
+ }
+ 
+ static inline u32 qspi_readb(struct ls_qspi *qspi, unsigned short offset)
+ {
+-        return readb(qspi->io_base+offset);
++    return readb(qspi->io_base + offset);
+ }
+ 
+-static inline void qspi_set_bit(struct ls_qspi *qspi, unsigned short offset,u8 value)
++static inline void qspi_set_bit(struct ls_qspi *qspi, unsigned short offset, u8 value)
+ {
+-        u8 tmp;
+-
+-        tmp =qspi_readb(qspi,offset);
+-        tmp |= value;
+-        qspi_writeb(qspi,offset,tmp);
+-
++    u8 tmp = qspi_readb(qspi, offset);
++    tmp |= value;
++    qspi_writeb(qspi, offset, tmp);
+ }
+ 
+-static inline void qspi_clr_bit(struct ls_qspi *qspi, unsigned short offset,u8 value)
++static inline void qspi_clr_bit(struct ls_qspi *qspi, unsigned short offset, u8 value)
+ {
+-        u8 tmp;
+-
+-        tmp = qspi_readb(qspi,offset);
+-        tmp &= ~value;
+-        qspi_writeb(qspi,offset,tmp);
+-
++    u8 tmp = qspi_readb(qspi, offset);
++    tmp &= ~value;
++    qspi_writeb(qspi, offset, tmp);
+ }
+ 
+ static inline void dump_reg(struct ls_qspi *qspi)
+ {
+-	printk("CR    :%08x\n",qspi_readb(qspi,QSPI_CR));
+-	printk("CSR   :%08x\n",qspi_readb(qspi,QSPI_CSR));
+-	printk("SR    :%08x\n",qspi_readb(qspi,QSPI_SR));
++    printk("CR :%08x\n", qspi_readb(qspi, QSPI_CR));
++    printk("CSR :%08x\n", qspi_readb(qspi, QSPI_CSR));
++    printk("SR :%08x\n", qspi_readb(qspi, QSPI_SR));
+ }
+ 
+-static int qspi_setting_spre(const void *key,const void *elt)
++/* FIX: Removed debug printk and fixed logic */
++static int qspi_setting_spre(const void *key, const void *elt)
+ {
+-        unsigned long *d = (unsigned long*)key;
+-        struct spretoregs_t *b = (struct spretoregs_t *)elt;
+-        if(*d > b->spre)
+-                return 1;
+-        else if(*d < b->spre)
+-                return -1;
+-        return 0;
++    unsigned int target_div = *(const unsigned int *)key;
++    const struct spretoregs_t *entry = (const struct spretoregs_t *)elt;
++
++    if (target_div > entry->spre)
++        return 1;
++    else if (target_div < entry->spre)
++        return -1;
++    return 0;
+ }
+ 
+-static struct spretoregs_t *search_divisor(unsigned int spre)
++/* FIX: Renamed to be clearer and removed debug prints */
++static unsigned short get_clk_div_reg_val(unsigned int target_divisor)
+ {
+-        struct spretoregs_t *b = NULL;
+-
+-        if(spre <= spretoregs[ARRAY_SIZE(spretoregs) - 1].spre)
+-                b = (struct spretoregs_t *)bsearch((const void*)&spre,(const void*)spretoregs,ARRAY_SIZE(spretoregs),
+-                                                       sizeof(struct spretoregs_t),qspi_setting_spre);
+-
+-        return b;
++    struct spretoregs_t *result;
++
++    /* Find the entry that matches or is the closest greater divisor */
++    result = (struct spretoregs_t *)bsearch(
++        (const void *)&target_divisor,
++        (const void *)spretoregs,
++        ARRAY_SIZE(spretoregs),
++        sizeof(struct spretoregs_t),
++        qspi_setting_spre);
++
++    if (result)
++        return result->div;
++
++    /* If exact match not found, bsearch returns NULL.
++     * We should find the next available slower speed (higher divisor).
++     * Note: The array is sorted by spre.
++     */
++    int i;
++    for (i = 0; i < ARRAY_SIZE(spretoregs); i++) {
++        if (spretoregs[i].spre >= target_divisor)
++            return spretoregs[i].div;
++    }
++
++    /* If target is higher than max supported divisor, use max divisor */
++    return spretoregs[ARRAY_SIZE(spretoregs) - 1].div;
+ }
+ 
+ static int ls_qspi_wait_nobusy(struct ls_qspi *qspi)
+ {
+-        u32 sr;
+-
+-        return readb_relaxed_poll_timeout(qspi->io_base + QSPI_CSR, sr,
+-                                          !(sr & QSPI_CSR_QBUSY), 10,
+-                                          QSPI_BUSY_TIMEOUT_US);
++    u32 sr;
++    return readb_relaxed_poll_timeout(qspi->io_base + QSPI_CSR, sr,
++                                      !(sr & QSPI_CSR_QBUSY), 10, QSPI_BUSY_TIMEOUT_US);
+ }
+ 
+-static void ls_qspi_set_framemode(struct spi_nor *nor,
+-                                     struct ls_qspi_cmd *cmd, bool read)
++static void ls_qspi_set_framemode(struct spi_nor *nor, struct ls_qspi_cmd *cmd, bool read)
+ {
+-        u32 dmode = QSPI_CR_QMODE_1;
+-
+-	if (read) {
+-                switch (nor->read_proto) {
+-                default:
+-                case SNOR_PROTO_1_1_1:
+-                        dmode = QSPI_CR_QMODE_1;
+-                        break;
+-		case SNOR_PROTO_1_1_2:
+-			dmode = QSPI_CR_QMODE_2;
+-			break;
+-		case SNOR_PROTO_1_1_4:
+-		case SNOR_PROTO_1_4_4:
+-			dmode = QSPI_CR_QMODE_4;
+-			break;
+-		}
+-	}
+-
+-	cmd->framemode = dmode;
+-
++    u32 dmode = QSPI_CR_QMODE_1;
++    if (read) {
++        switch (nor->read_proto) {
++        default:
++        case SNOR_PROTO_1_1_1:
++            dmode = QSPI_CR_QMODE_1;
++            break;
++        case SNOR_PROTO_1_1_2:
++            dmode = QSPI_CR_QMODE_2;
++            break;
++        case SNOR_PROTO_1_1_4:
++        case SNOR_PROTO_1_4_4:
++            dmode = QSPI_CR_QMODE_4;
++            break;
++        }
++    }
++    cmd->framemode = dmode;
+ }
+ 
+ static void ls_qspi_read_fifo(u8 *val, struct ls_qspi *qspi)
+ {
+-        *val = qspi_readb(qspi,QSPI_DR);
++    *val = qspi_readb(qspi, QSPI_DR);
+ }
+ 
+ static void ls_qspi_write_fifo(u8 *val, struct ls_qspi *qspi)
+ {
+-	qspi_writeb(qspi,QSPI_DR,*val);
++    qspi_writeb(qspi, QSPI_DR, *val);
+ }
+ 
+-void qspi_set_dummy_cycles(struct ls_qspi *qspi,u8 cycles)
++static void qspi_set_dummy_cycles(struct ls_qspi *qspi, u8 cycles)
+ {
+-	qspi_set_bit(qspi,QSPI_CR,QSPI_CR_DUMMY);
+-
+-	qspi_writeb(qspi,QSPI_DR,cycles-1);
+-
+-	qspi_clr_bit(qspi,QSPI_CR,QSPI_CR_DUMMY);
++    /* Assuming hardware requires cycles - 1 */
++    qspi_set_bit(qspi, QSPI_CR, QSPI_CR_DUMMY);
++    qspi_writeb(qspi, QSPI_DR, cycles - 1);
++    qspi_clr_bit(qspi, QSPI_CR, QSPI_CR_DUMMY);
+ }
+ 
+-static int ls_qspi_tx_poll(struct ls_qspi *qspi,
+-                              const struct ls_qspi_cmd *cmd)
++static int ls_qspi_tx_poll(struct ls_qspi *qspi, const struct ls_qspi_cmd *cmd)
+ {
+-        void (*tx_fifo)(u8 * ,struct ls_qspi *);
+-        u32 len = cmd->len;
+-        u8 *buf = cmd->buf;
+-	u8 setb,clrb;
+-
+-	qspi_clr_bit(qspi,QSPI_CSR,QSPI_CSR_QCS);
+-
+-	qspi_writeb(qspi,QSPI_DR,cmd->opcode);
+-
+-	if(cmd->addr_width){
+-		if(cmd->addr_width ==3){
+-			qspi_writeb(qspi,QSPI_DR,(uint8_t)(cmd->addr >>16));
+-			qspi_writeb(qspi,QSPI_DR,(uint8_t)(cmd->addr >>8));
+-			qspi_writeb(qspi,QSPI_DR,(uint8_t)(cmd->addr));
+-		}else if(cmd->addr_width ==4){
+-			qspi_writeb(qspi,QSPI_DR,(uint8_t)(cmd->addr >>24));
+-			qspi_writeb(qspi,QSPI_DR,(uint8_t)(cmd->addr >>16));
+-			qspi_writeb(qspi,QSPI_DR,(uint8_t)(cmd->addr >>8));
+-			qspi_writeb(qspi,QSPI_DR,(uint8_t)(cmd->addr));
+-		}
+-	}
+-
+-	if(cmd->dummy)
+-		qspi_set_dummy_cycles(qspi,8);
+-
+-	setb = (cmd->framemode)  &QSPI_CR_QTYPE_MASK;
+-	clrb = QSPI_CR_QTYPE_MASK;
+-	qspi_writeb(qspi,QSPI_CR,qspi_readb(qspi,QSPI_CR) &~clrb |setb);
+-
+-	if (cmd->qspimode == FMODE_INDW)
+-                tx_fifo = ls_qspi_write_fifo;
+-	else
+-                tx_fifo = ls_qspi_read_fifo;
+-        while (len--) {
+-
+-                tx_fifo(buf++, qspi);
++    void (*tx_fifo)(u8 *, struct ls_qspi *);
++    u32 len = cmd->len;
++    u8 *buf = cmd->buf;
++    u8 setb, clrb;
++
++    qspi_clr_bit(qspi, QSPI_CSR, QSPI_CSR_QCS);
++    qspi_writeb(qspi, QSPI_DR, cmd->opcode);
++
++    if (cmd->addr_width) {
++        if (cmd->addr_width == 3) {
++            qspi_writeb(qspi, QSPI_DR, (uint8_t)(cmd->addr >> 16));
++            qspi_writeb(qspi, QSPI_DR, (uint8_t)(cmd->addr >> 8));
++            qspi_writeb(qspi, QSPI_DR, (uint8_t)(cmd->addr));
++        } else if (cmd->addr_width == 4) {
++            qspi_writeb(qspi, QSPI_DR, (uint8_t)(cmd->addr >> 24));
++            qspi_writeb(qspi, QSPI_DR, (uint8_t)(cmd->addr >> 16));
++            qspi_writeb(qspi, QSPI_DR, (uint8_t)(cmd->addr >> 8));
++            qspi_writeb(qspi, QSPI_DR, (uint8_t)(cmd->addr));
+         }
++    }
++
++    if (cmd->dummy)
++        qspi_set_dummy_cycles(qspi, cmd->dummy); // FIX: Pass cmd->dummy, not hardcoded 8
+ 
+-	setb = QSPI_CR_QMODE_1 &QSPI_CR_QMODE_MASK;
+-	clrb = QSPI_CR_QTYPE_MASK;
+-	qspi_writeb(qspi,QSPI_CR,qspi_readb(qspi,QSPI_CR) &~clrb |setb);
++    /* Set Frame Mode */
++    setb = cmd->framemode & QSPI_CR_QMODE_MASK;
++    clrb = QSPI_CR_QMODE_MASK; // FIX: Clear QMODE bits, not QTYPE bits
++    qspi_writeb(qspi, QSPI_CR, (qspi_readb(qspi, QSPI_CR) & ~clrb) | setb);
+ 
+-	qspi_set_bit(qspi,QSPI_CSR,QSPI_CSR_QCS);
++    if (cmd->qspimode == FMODE_INDW)
++        tx_fifo = ls_qspi_write_fifo;
++    else
++        tx_fifo = ls_qspi_read_fifo;
+ 
+-        return 0;
++    /* Data Transfer */
++    if (buf && len > 0) { // FIX: Check buf validity
++        while (len--) {
++            tx_fifo(buf++, qspi);
++        }
++    }
++
++    /* Restore Default Mode (1-Line) */
++    setb = QSPI_CR_QMODE_1;
++    clrb = QSPI_CR_QMODE_MASK;
++    qspi_writeb(qspi, QSPI_CR, (qspi_readb(qspi, QSPI_CR) & ~clrb) | setb);
++
++    qspi_set_bit(qspi, QSPI_CSR, QSPI_CSR_QCS);
++    return 0;
+ }
+ 
+-static int ls_qspi_tx(struct ls_qspi *qspi,
+-                         const struct ls_qspi_cmd *cmd)
++static int ls_qspi_tx(struct ls_qspi *qspi, const struct ls_qspi_cmd *cmd)
+ {
+-
+-        return ls_qspi_tx_poll(qspi, cmd);
++    return ls_qspi_tx_poll(qspi, cmd);
+ }
+ 
+-static int ls_qspi_send(struct ls_qspi_flash *flash,
+-                           const struct ls_qspi_cmd *cmd)
++static int ls_qspi_send(struct ls_qspi_flash *flash, const struct ls_qspi_cmd *cmd)
+ {
+-        struct ls_qspi *qspi = flash->qspi;
+-        int err;
++    struct ls_qspi *qspi = flash->qspi;
++    int err;
+ 
+-        err = ls_qspi_wait_nobusy(qspi);
+-        if (err)
+-                goto abort;
++    err = ls_qspi_wait_nobusy(qspi);
++    if (err)
++        goto abort;
+ 
+-        err = ls_qspi_tx(qspi, cmd);
+-        if (err)
+-                goto abort;
++    err = ls_qspi_tx(qspi, cmd);
++    if (err)
++        goto abort;
+ 
+-	return err;
++    return 0; // FIX: Return 0 on success, not 'err' (which might be uninitialized or confusing)
+ 
+ abort:
+-
+-        if (err)
+-                dev_err(qspi->dev, "%s abort err:%d\n", __func__, err);
+-
+-        return err;
+-
++    dev_err(qspi->dev, "%s abort err:%d\n", __func__, err);
++    return err;
+ }
+ 
+-static int ls_qspi_read_reg(struct spi_nor *nor,
+-                               u8 opcode, u8 *buf, int len)
++static int ls_qspi_read_reg(struct spi_nor *nor, u8 opcode, u8 *buf, size_t len)
+ {
+-        struct ls_qspi_flash *flash = nor->priv;
+-        struct device *dev = flash->qspi->dev;
+-        struct ls_qspi_cmd cmd;
+-
+-        dev_dbg(dev, "read_reg: cmd:%#.2x buf:%pK len:%#x\n", opcode, buf, len);
+-
+-        memset(&cmd, 0, sizeof(cmd));
+-        cmd.opcode = opcode;
+-        cmd.tx_data = true;
+-        cmd.len = len;
+-        cmd.buf = buf;
+-        cmd.qspimode = FMODE_INDR;
+-
+-        ls_qspi_set_framemode(nor, &cmd, false);
+-
+-        return ls_qspi_send(flash, &cmd);
++    struct ls_qspi_flash *flash = nor->priv;
++    struct device *dev = flash->qspi->dev;
++    struct ls_qspi_cmd cmd;
++
++    dev_dbg(dev, "read_reg: cmd:%#.2x buf:%pK len:%#zx\n", opcode, buf, len);
++    memset(&cmd, 0, sizeof(cmd));
++    cmd.opcode = opcode;
++    cmd.tx_data = true;
++    cmd.len = len;
++    cmd.buf = buf;
++    cmd.qspimode = FMODE_INDR;
++    ls_qspi_set_framemode(nor, &cmd, false);
++
++    return ls_qspi_send(flash, &cmd);
+ }
+ 
+-static int ls_qspi_write_reg(struct spi_nor *nor, u8 opcode,
+-                                u8 *buf, int len)
++static int ls_qspi_write_reg(struct spi_nor *nor, u8 opcode, const u8 *buf, size_t len)
+ {
+-        struct ls_qspi_flash *flash = nor->priv;
+-        struct device *dev = flash->qspi->dev;
+-        struct ls_qspi_cmd cmd;
+-
+-        dev_dbg(dev, "write_reg: cmd:%#.2x buf:%pK len:%#x\n", opcode, buf, len);
+-
+-        memset(&cmd, 0, sizeof(cmd));
+-        cmd.opcode = opcode;
+-        cmd.tx_data = !!(buf && len > 0);
+-        cmd.len = len;
+-        cmd.buf = buf;
+-        cmd.qspimode = FMODE_INDW;
+-
+-        ls_qspi_set_framemode(nor, &cmd, false);
+-
+-        return ls_qspi_send(flash, &cmd);
++    struct ls_qspi_flash *flash = nor->priv;
++    struct device *dev = flash->qspi->dev;
++    struct ls_qspi_cmd cmd;
++
++    dev_dbg(dev, "write_reg: cmd:%#.2x buf:%pK len:%#zx\n", opcode, buf, len);
++    memset(&cmd, 0, sizeof(cmd));
++    cmd.opcode = opcode;
++    cmd.tx_data = !!(buf && len > 0);
++    cmd.len = len;
++    cmd.buf = (void *)buf;
++    cmd.qspimode = FMODE_INDW;
++    ls_qspi_set_framemode(nor, &cmd, false);
++
++    return ls_qspi_send(flash, &cmd);
+ }
+ 
+-static ssize_t ls_qspi_read(struct spi_nor *nor, loff_t from, size_t len,
+-                               u_char *buf)
++static ssize_t ls_qspi_read(struct spi_nor *nor, loff_t from, size_t len, u_char *buf)
+ {
+-        struct ls_qspi_flash *flash = nor->priv;
+-        struct ls_qspi *qspi = flash->qspi;
+-        struct ls_qspi_cmd cmd;
+-        int err;
+-
+-        dev_dbg(qspi->dev, "read(%#.2x): buf:%pK from:%#.8x len:%#zx\n",
+-                nor->read_opcode, buf, (u32)from, len);
+-
+-        memset(&cmd, 0, sizeof(cmd));
+-        cmd.opcode = nor->read_opcode;
+-        cmd.addr_width = nor->addr_width;
+-        cmd.addr = (u32)from;
+-        cmd.tx_data = true;
+-        cmd.dummy = nor->read_dummy;
+-        cmd.len = len;
+-        cmd.buf = buf;
+-        cmd.qspimode = FMODE_INDR;
+-
+-        ls_qspi_set_framemode(nor, &cmd, true);
+-        err = ls_qspi_send(flash, &cmd);
+-
+-        return err ? err : len;
++    struct ls_qspi_flash *flash = nor->priv;
++    struct ls_qspi *qspi = flash->qspi;
++    struct ls_qspi_cmd cmd;
++    int err;
++
++    dev_dbg(qspi->dev, "read(%#.2x): buf:%pK from:%#.8x len:%#zx\n",
++            nor->read_opcode, buf, (u32)from, len);
++
++    memset(&cmd, 0, sizeof(cmd));
++    cmd.opcode = nor->read_opcode;
++    cmd.addr_width = nor->addr_nbytes;
++    cmd.addr = (u32)from;
++    cmd.tx_data = true;
++    cmd.dummy = nor->read_dummy;
++    cmd.len = len;
++    cmd.buf = buf;
++    cmd.qspimode = FMODE_INDR;
++    ls_qspi_set_framemode(nor, &cmd, true);
++
++    err = ls_qspi_send(flash, &cmd);
++    return err ? err : len;
+ }
+ 
+-static ssize_t ls_qspi_write(struct spi_nor *nor, loff_t to, size_t len,
+-                                const u_char *buf)
++static ssize_t ls_qspi_write(struct spi_nor *nor, loff_t to, size_t len, const u_char *buf)
+ {
+-        struct ls_qspi_flash *flash = nor->priv;
+-        struct device *dev = flash->qspi->dev;
+-        struct ls_qspi_cmd cmd;
+-        int err;
+-
+-        dev_dbg(dev, "write(%#.2x): buf:%p to:%#.8x len:%#zx\n",
+-                nor->program_opcode, buf, (u32)to, len);
+-
+-        memset(&cmd, 0, sizeof(cmd));
+-        cmd.opcode = nor->program_opcode;
+-        cmd.addr_width = nor->addr_width;
+-        cmd.addr = (u32)to;
+-        cmd.tx_data = true;
+-        cmd.len = len;
+-        cmd.buf = (void *)buf;
+-        cmd.qspimode = FMODE_INDW;
+-
+-        ls_qspi_set_framemode(nor, &cmd, false);
+-        err = ls_qspi_send(flash, &cmd);
+-
+-        return err ? err : len;
++    struct ls_qspi_flash *flash = nor->priv;
++    struct device *dev = flash->qspi->dev;
++    struct ls_qspi_cmd cmd;
++    int err;
++
++    dev_dbg(dev, "write(%#.2x): buf:%p to:%#.8x len:%#zx\n",
++            nor->program_opcode, buf, (u32)to, len);
++
++    memset(&cmd, 0, sizeof(cmd));
++    cmd.opcode = nor->program_opcode;
++    cmd.addr_width = nor->addr_nbytes;
++    cmd.addr = (u32)to;
++    cmd.tx_data = true;
++    cmd.len = len;
++    cmd.buf = (void *)buf;
++    cmd.qspimode = FMODE_INDW;
++    ls_qspi_set_framemode(nor, &cmd, false);
++
++    err = ls_qspi_send(flash, &cmd);
++    return err ? err : len;
+ }
+ 
+ static int ls_qspi_erase(struct spi_nor *nor, loff_t offs)
+ {
+-        struct ls_qspi_flash *flash = nor->priv;
+-        struct device *dev = flash->qspi->dev;
+-        struct ls_qspi_cmd cmd;
+-
+-        dev_dbg(dev, "erase(%#.2x):offs:%#x\n", nor->erase_opcode, (u32)offs);
+-
+-        memset(&cmd, 0, sizeof(cmd));
+-        cmd.opcode = nor->erase_opcode;
+-        cmd.addr_width = nor->addr_width;
+-        cmd.addr = (u32)offs;
+-        cmd.qspimode = FMODE_INDW;
+-
+-        ls_qspi_set_framemode(nor, &cmd, false);
+-
+-        return ls_qspi_send(flash, &cmd);
++    struct ls_qspi_flash *flash = nor->priv;
++    struct device *dev = flash->qspi->dev;
++    struct ls_qspi_cmd cmd;
++
++    dev_dbg(dev, "erase(%#.2x):offs:%#x\n", nor->erase_opcode, (u32)offs);
++
++    memset(&cmd, 0, sizeof(cmd));
++    cmd.opcode = nor->erase_opcode;
++    cmd.addr_width = nor->addr_nbytes;
++    cmd.addr = (u32)offs;
++    cmd.qspimode = FMODE_INDW;
++    ls_qspi_set_framemode(nor, &cmd, false);
++    return ls_qspi_send(flash, &cmd);
+ }
+ 
+-static int ls_qspi_prep(struct spi_nor *nor, enum spi_nor_ops ops)
++static int ls_qspi_prep(struct spi_nor *nor)
+ {
+-        struct ls_qspi_flash *flash = nor->priv;
+-        struct ls_qspi *qspi = flash->qspi;
+-
+-        mutex_lock(&qspi->lock);
+-        return 0;
++    struct ls_qspi_flash *flash = nor->priv;
++    struct ls_qspi *qspi = flash->qspi;
++    mutex_lock(&qspi->lock);
++    return 0;
+ }
+ 
+-static void ls_qspi_unprep(struct spi_nor *nor, enum spi_nor_ops ops)
++static void ls_qspi_unprep(struct spi_nor *nor)
+ {
+-        struct ls_qspi_flash *flash = nor->priv;
+-        struct ls_qspi *qspi = flash->qspi;
+-
+-        mutex_unlock(&qspi->lock);
++    struct ls_qspi_flash *flash = nor->priv;
++    struct ls_qspi *qspi = flash->qspi;
++    mutex_unlock(&qspi->lock);
+ }
+ 
+-static int ls_qspi_flash_setup(struct ls_qspi *qspi,
+-                                  struct device_node *np)
+-{
+-        struct spi_nor_hwcaps hwcaps = {
+-                .mask = SNOR_HWCAPS_READ |
+-                        SNOR_HWCAPS_READ_FAST |
+-                        SNOR_HWCAPS_PP,
+-        };
+-        u32 width, presc, cs_num, max_rate = 0;
+-	u8  setb=0,clrb=0;
+-	struct ls_qspi_flash *flash;
+-        struct mtd_info *mtd;
+-        int ret;
+-	struct spretoregs_t *st;
+-
+-        of_property_read_u32(np, "reg", &cs_num);
+-        if (cs_num >= LS_MAX_NORCHIP)
+-                return -EINVAL;
+-
+-        of_property_read_u32(np, "spi-max-frequency", &max_rate);
+-        if (!max_rate)
+-                return -EINVAL;
+-
+-        presc = DIV_ROUND_UP(100000000, max_rate);
+-	st = search_divisor(presc);
+-	if(st){
+-		presc =st->div;
+-	}else{
+-		return -1;
+-	}
+-
+-        if (of_property_read_u32(np, "spi-rx-bus-width", &width))
+-                width = 1;
+-
+-	if (width == 4)
+-		hwcaps.mask |= SNOR_HWCAPS_READ_1_1_4;
+-	else if (width == 2)
+-		hwcaps.mask |= SNOR_HWCAPS_READ_1_1_2;
+-	else if (width != 1)
+-		return -EINVAL;
+-
+-	flash = &qspi->flash[cs_num];
+-	flash->qspi = qspi;
+-	flash->cs = cs_num;
+-	flash->presc = presc;
+-
+-	flash->nor.dev = qspi->dev;
+-	spi_nor_set_flash_node(&flash->nor, np);
+-	flash->nor.priv = flash;
+-	mtd = &flash->nor.mtd;
+-
+-	flash->nor.read = ls_qspi_read;
+-	flash->nor.write = ls_qspi_write;
+-	flash->nor.erase = ls_qspi_erase;
+-	flash->nor.read_reg = ls_qspi_read_reg;
+-	flash->nor.write_reg = ls_qspi_write_reg;
+-	flash->nor.prepare = ls_qspi_prep;
+-	flash->nor.unprepare = ls_qspi_unprep;
+-
+-	/*Switch to QSPI mode*/
+-	qspi_set_bit(qspi,QSPI_RSSR,QSPI_RSSR_SPACE);
+-	qspi_set_bit(qspi,QSPI_SR,QSPI_SR_SWITCH);
+-
+-	/*Set clk div */
+-	setb |= (flash->presc << QSPI_CSR_CLK_DIV_SHIFET)  &QSPI_CSR_CLK_DIV_MASK;
+-	clrb |= QSPI_CSR_CLK_DIV_MASK;
+-	qspi_writeb(qspi,QSPI_CSR,qspi_readb(qspi,QSPI_CSR) &~clrb |setb);
+-
+-
+-	ret = spi_nor_scan(&flash->nor, NULL, &hwcaps);
+-	if(ret) {
+-		dev_err(qspi->dev, "device scan failed\n");
+-		return ret;
+-	}
+-
+-
+-	ret = mtd_device_register(mtd, NULL, 0);
+-	if (ret) {
+-		dev_err(qspi->dev, "mtd device parse failed\n");
+-		return ret;
+-	}
+-
+-	flash->registered = true;
+-
+-	dev_dbg(qspi->dev, "cs:%d bus:%d\n", cs_num, width);
+-
+-	return 0;
++static const struct spi_nor_controller_ops ls_controller_ops = {
++    .prepare = ls_qspi_prep,
++    .unprepare = ls_qspi_unprep,
++    .read_reg = ls_qspi_read_reg,
++    .write_reg = ls_qspi_write_reg,
++    .read = ls_qspi_read,
++    .write = ls_qspi_write,
++    .erase = ls_qspi_erase,
++};
+ 
++static int ls_qspi_flash_setup(struct ls_qspi *qspi, struct device_node *np)
++{
++    struct spi_nor_hwcaps hwcaps = {
++        .mask = SNOR_HWCAPS_READ | SNOR_HWCAPS_READ_FAST | SNOR_HWCAPS_PP,
++    };
++    u32 width, presc, cs_num, max_rate = 0;
++    u8 setb = 0, clrb = 0;
++    struct ls_qspi_flash *flash;
++    struct mtd_info *mtd;
++    int ret;
++    unsigned short div_reg_val; // Renamed for clarity
++
++    of_property_read_u32(np, "reg", &cs_num);
++    if (cs_num >= LS_MAX_NORCHIP)
++        return -EINVAL;
++    of_property_read_u32(np, "spi-max-frequency", &max_rate);
++    if (!max_rate)
++        return -EINVAL;
++
++    /* FIX: Refactored clock divisor calculation */
++    presc = DIV_ROUND_UP(100000000, max_rate);
++    div_reg_val = get_clk_div_reg_val(presc);
++
++    if (of_property_read_u32(np, "spi-rx-bus-width", &width))
++        width = 1;
++    if (width == 4)
++        hwcaps.mask |= SNOR_HWCAPS_READ_1_1_4;
++    else if (width == 2)
++        hwcaps.mask |= SNOR_HWCAPS_READ_1_1_2;
++    else if (width != 1) {
++        dev_err(qspi->dev, "%s, %d\n", __func__, __LINE__);
++        return -EINVAL;
++    }
++
++    flash = &qspi->flash[cs_num];
++    flash->qspi = qspi;
++    flash->cs = cs_num;
++    flash->presc = div_reg_val; // Store the register value
++    flash->nor.dev = qspi->dev;
++    spi_nor_set_flash_node(&flash->nor, np);
++    flash->nor.priv = flash;
++    flash->nor.controller_ops = &ls_controller_ops;
++    mtd = &flash->nor.mtd;
++
++    /* Switch to QSPI mode */
++    qspi_set_bit(qspi, QSPI_RSSR, QSPI_RSSR_SPACE);
++    qspi_set_bit(qspi, QSPI_SR, QSPI_SR_SWITCH);
++
++    /* Set clk div */
++    setb |= (flash->presc << QSPI_CSR_CLK_DIV_SHIFT) & QSPI_CSR_CLK_DIV_MASK;
++    clrb |= QSPI_CSR_CLK_DIV_MASK;
++    qspi_writeb(qspi, QSPI_CSR, (qspi_readb(qspi, QSPI_CSR) & ~clrb) | setb);
++
++    ret = spi_nor_scan(&flash->nor, NULL, &hwcaps);
++    if (ret) {
++        dev_err(qspi->dev, "device scan failed\n");
++        return ret;
++    }
++
++    ret = mtd_device_register(mtd, NULL, 0);
++    if (ret) {
++        dev_err(qspi->dev, "mtd device parse failed\n");
++        return ret;
++    }
++    flash->registered = true;
++    dev_info(qspi->dev, "cs:%d bus:%d\n", cs_num, width);
++    return 0;
+ }
+ 
+ static void ls_qspi_mtd_free(struct ls_qspi *qspi)
+ {
+-        int i;
+-
+-        for (i = 0; i < LS_MAX_NORCHIP; i++)
+-                if (qspi->flash[i].registered)
+-                        mtd_device_unregister(&qspi->flash[i].nor.mtd);
++    int i;
++    for (i = 0; i < LS_MAX_NORCHIP; i++)
++        if (qspi->flash[i].registered)
++            mtd_device_unregister(&qspi->flash[i].nor.mtd);
+ }
+ 
+ static int ls_qspi_probe(struct platform_device *pdev)
+ {
+-        struct device *dev = &pdev->dev;
+-        struct device_node *flash_np;
+-        struct ls_qspi *qspi;
+-        struct resource *res;
+-        int ret;
+-
+-	qspi = devm_kzalloc(dev, sizeof(*qspi), GFP_KERNEL);
+-	if (!qspi)
+-		return -ENOMEM;
+-
+-	qspi->nor_num = of_get_child_count(dev->of_node);
+-	if (!qspi->nor_num || qspi->nor_num > LS_MAX_NORCHIP)
+-		return -ENODEV;
+-
+-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "qspi");
+-	qspi->io_base = devm_ioremap_resource(dev, res);
+-	if (IS_ERR(qspi->io_base))
+-		return PTR_ERR(qspi->io_base);
+-
+-	init_completion(&qspi->cmd_completion);
+-
+-	qspi->dev = dev;
+-	platform_set_drvdata(pdev, qspi);
+-	mutex_init(&qspi->lock);
+-
+-	for_each_available_child_of_node(dev->of_node, flash_np) {
+-		ret = ls_qspi_flash_setup(qspi, flash_np);
+-		if (ret) {
+-			dev_err(dev, "unable to setup flash chip\n");
+-			goto err_flash;
+-		}
+-	}
+-
+-	return 0;
++    struct device *dev = &pdev->dev;
++    struct device_node *flash_np;
++    struct ls_qspi *qspi;
++    struct resource *res;
++    int ret;
++
++    qspi = devm_kzalloc(dev, sizeof(*qspi), GFP_KERNEL);
++    if (!qspi)
++        return -ENOMEM;
++
++    qspi->nor_num = of_get_child_count(dev->of_node);
++    if (!qspi->nor_num || qspi->nor_num > LS_MAX_NORCHIP)
++        return -ENODEV;
++
++    res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "qspi");
++    qspi->io_base = devm_ioremap_resource(dev, res);
++    if (IS_ERR(qspi->io_base))
++        return PTR_ERR(qspi->io_base);
++
++    init_completion(&qspi->cmd_completion);
++    qspi->dev = dev;
++    platform_set_drvdata(pdev, qspi);
++    mutex_init(&qspi->lock);
++
++    for_each_available_child_of_node(dev->of_node, flash_np) {
++        ret = ls_qspi_flash_setup(qspi, flash_np);
++        if (ret) {
++            dev_err(dev, "unable to setup flash chip\n");
++            goto err_flash;
++        }
++    }
++    return 0;
+ 
+ err_flash:
+-        mutex_destroy(&qspi->lock);
+-        ls_qspi_mtd_free(qspi);
+-
+-	return ret;
++    mutex_destroy(&qspi->lock);
++    ls_qspi_mtd_free(qspi);
++    return ret;
+ }
+ 
+ static int ls_qspi_remove(struct platform_device *pdev)
+ {
+-        struct ls_qspi *qspi = platform_get_drvdata(pdev);
+-
+-        /* disable qspi */
+-
+-        ls_qspi_mtd_free(qspi);
+-        mutex_destroy(&qspi->lock);
+-
+-        return 0;
++    struct ls_qspi *qspi = platform_get_drvdata(pdev);
++    /* disable qspi */
++    ls_qspi_mtd_free(qspi);
++    mutex_destroy(&qspi->lock);
++    return 0;
+ }
+ 
+ static const struct of_device_id loongson_qspi_match[] = {
+-        {.compatible = "ls,ls-qspi"},
+-        {}
++    { .compatible = "ls,ls-qspi" },
++    { }
+ };
+ MODULE_DEVICE_TABLE(of, loongson_qspi_match);
+ 
+ static struct platform_driver ls_qspi_driver = {
+-        .probe  = ls_qspi_probe,
+-        .remove = ls_qspi_remove,
+-        .driver = {
+-                .name = "ls-quadspi",
+-                .of_match_table = loongson_qspi_match,
+-        },
++    .probe = ls_qspi_probe,
++    .remove = ls_qspi_remove,
++    .driver = {
++        .name = "ls-quadspi",
++        .of_match_table = loongson_qspi_match,
++    },
+ };
+ module_platform_driver(ls_qspi_driver);
+ 
+-MODULE_AUTHOR("ruizhao  <zhaorui@loongson.cn>");
++MODULE_AUTHOR("ruizhao <zhaorui@loongson.cn>");
+ MODULE_DESCRIPTION("loongson quad spi driver");
+-MODULE_LICENSE("GPL v2");
+-
+-
++MODULE_LICENSE("GPL v2");
+\ No newline at end of file
+-- 
+2.43.0
+

@@ -78,6 +78,12 @@ do_compile:prepend() {
 do_install:append() {
     install -d ${D}${systemd_system_unitdir}
     install -m 0644 ${UNPACKDIR}/${BPN}-${PV}/build/one-kvm.service ${D}${systemd_system_unitdir}/
+
+    sed -i 's|ExecStart=/usr/bin/one-kvm|ExecStart=/usr/bin/one-kvm -d /data/one-kvm|' ${D}${systemd_system_unitdir}/one-kvm.service
 }
 
-FILES:${PN} += "${systemd_system_unitdir}/one-kvm.service"
+# FILES:${PN} += " ${systemd_system_unitdir}/one-kvm.service"
+
+inherit systemd
+SYSTEMD_SERVICE:${PN} = "one-kvm.service"
+SYSTEMD_AUTO_ENABLE:${PN} = "enable"

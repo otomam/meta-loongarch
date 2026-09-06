@@ -1,16 +1,16 @@
-From 1c49fd928555a579946f71964b64e4d42e82046b Mon Sep 17 00:00:00 2001
+From b721be7e34ae7537db6c9b78094dd9d42dd98a83 Mon Sep 17 00:00:00 2001
 From: oto <oto102079@gmail.com>
-Date: Thu, 3 Sep 2026 12:56:27 +0800
+Date: Sat, 5 Sep 2026 19:50:59 +0800
 Subject: [PATCH] sdio wifi
 
 ---
  .../boot/dts/loongson_2k0300_99_pai_wifi.dts  | 20 +++++++------------
- drivers/mmc/host/ls2kmci.c                    | 11 ++++++++--
+ drivers/mmc/host/ls2kmci.c                    | 16 +++++++++++++--
  drivers/mmc/host/ls2kmci.h                    |  2 ++
- 3 files changed, 18 insertions(+), 15 deletions(-)
+ 3 files changed, 23 insertions(+), 15 deletions(-)
 
 diff --git a/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts b/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
-index 8ea8a7d4b..673182fb3 100644
+index 8ea8a7d4b..8307a8e45 100644
 --- a/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
 +++ b/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
 @@ -88,13 +88,19 @@
@@ -28,7 +28,7 @@ index 8ea8a7d4b..673182fb3 100644
 +	status = "okay";
 +	pinctrl-names = "default";
 +	pinctrl-0 = <&sdio1_6bit>;
-+	en-gpio = <&gpa5 1 0>;
++	en-gpios = <&gpa5 1 0>;
 +};
 +
  &ehci {
@@ -54,7 +54,7 @@ index 8ea8a7d4b..673182fb3 100644
  	status = "disabled";
  	pinctrl-names = "default";
 diff --git a/drivers/mmc/host/ls2kmci.c b/drivers/mmc/host/ls2kmci.c
-index ede9decc8..be2fc33c7 100644
+index ede9decc8..ca9fc2755 100644
 --- a/drivers/mmc/host/ls2kmci.c
 +++ b/drivers/mmc/host/ls2kmci.c
 @@ -24,6 +24,7 @@
@@ -82,28 +82,33 @@ index ede9decc8..be2fc33c7 100644
  
  	writel(ccon, host->base + SDICMDCON);
  }
-@@ -972,6 +973,12 @@ static int ls2k_mci_probe(struct platform_device *pdev)
+@@ -972,6 +973,17 @@ static int ls2k_mci_probe(struct platform_device *pdev)
  		device_property_read_u64(&pdev->dev, "clock-frequency", (u64 *)&host->clk_rate);
  	}
  
-+	host->gpio_en = of_get_named_gpio(pdev->dev.of_node, "en-gpio", 0);
-+	if (!gpio_is_valid(host->gpio_en))
-+		dev_info(&pdev->dev, "Not gpio to enable");
-+	else
-+		gpio_direction_output(host->gpio_en, 1);
++	if (device_property_read_bool(&pdev->dev, "no-mmc")) {
++		host->en_gpio = of_get_named_gpio(pdev->dev.of_node, "en-gpios", 0);
++		if (!gpio_is_valid(host->en_gpio)) {
++			dev_err(&pdev->dev, "Error %s: Cannot get EN GPIO for %s\n", __func__, mmc_hostname(mmc));
++		}
++		else {
++			gpio_direction_output(host->en_gpio, 1);
++			dev_info(&pdev->dev, "successfully %s: Toggled EN GPIO = 1 for %s\n", __func__, mmc_hostname(mmc));
++		}
++	}
 +
  	mmc->ops	= &ls2k_mci_ops;
  	mmc->ocr_avail	= MMC_VDD_32_33|MMC_VDD_33_34;
  
 diff --git a/drivers/mmc/host/ls2kmci.h b/drivers/mmc/host/ls2kmci.h
-index 5340d0556..9d8233cdd 100644
+index 5340d0556..d2d1763a7 100644
 --- a/drivers/mmc/host/ls2kmci.h
 +++ b/drivers/mmc/host/ls2kmci.h
 @@ -224,6 +224,8 @@ struct ls2k_mci_host {
  	int			dodma;
  	int			dmatogo;
  
-+	int			gpio_en;
++	int			en_gpio;
 +
  	bool			irq_disabled;
  	bool			irq_enabled;

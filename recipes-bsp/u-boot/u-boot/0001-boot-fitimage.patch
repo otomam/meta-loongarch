@@ -24,8 +24,8 @@ Subject: [PATCH] boot fitimage
  drivers/usb/host/ehci.h                       |   3 +
  drivers/video/loongson_fb.c                   |   6 +-
  include/configs/loongson_2k0300.h             |   8 -
- include/configs/loongson_common.h             |   1 +
- 21 files changed, 181 insertions(+), 168 deletions(-)
+ include/configs/loongson_common.h             |   2 +
+ 21 files changed, 182 insertions(+), 168 deletions(-)
 
 diff --git a/arch/loongarch/cpu/start.S b/arch/loongarch/cpu/start.S
 index 05616f8e..0a66ce20 100644
@@ -843,14 +843,15 @@ index f4b0323e..80da35f6 100644
  #endif
  
 diff --git a/include/configs/loongson_common.h b/include/configs/loongson_common.h
-index ca6628dc..968c8ac2 100644
+index ca6628dc..351a5bb5 100644
 --- a/include/configs/loongson_common.h
 +++ b/include/configs/loongson_common.h
-@@ -130,6 +130,7 @@ boot"
+@@ -130,6 +130,8 @@ boot"
  	"rd_size=" __stringify(RD_SIZE) "\0" 					\
  	"mtdids=" CONFIG_MTDIDS_DEFAULT "\0"					\
  	"mtdparts=" CONFIG_MTDPARTS_DEFAULT "\0"				\
 +	"initrd_high=0xffffffffffffffff\0" \
++	"bootcmd=ext4load mmc 0:1 ${loadaddr} /boot/fitImage; bootm ${loadaddr}\0" \
  	"splashpos=m,m\0" \
  	"panel=default\0" \
  	"rotate=0\0" \
