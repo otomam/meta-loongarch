@@ -1,0 +1,9 @@
+[Unit]
+Description=Ping Gateway Once
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/ping_gateway.sh
+User=root

@@ -30,6 +30,7 @@ SRC_URI:append:loongson-2k0300-99pai = " \
             file://0001-disable-debug-log.patch \
             file://0001-sdio-wifi.patch \
             file://0001-spi-flash.patch \
+            file://0001-spi2-to-gpio.patch \
            "
 
 PV = "6.9"

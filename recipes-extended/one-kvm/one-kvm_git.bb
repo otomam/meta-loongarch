@@ -5,15 +5,16 @@ HOMEPAGE = "https://docs.one-kvm.cn/"
 LICENSE = "GPL-3.0-only"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=1ebbd3e34237af26da5dc08a4e440464"
 
-SRC_URI = "git://github.com/otomam/One-KVM.git;protocol=https;branch=loong \
+SRC_URI = "git://github.com/otomam/One-KVM.git;protocol=https;branch=loong2 \
            file://Cargo.lock;subdir=${UNPACKDIR}/${BPN}-${PV} \
+           file://0001-for-loong2k300.patch \
            git://github.com/otomam/serialport-rs.git;protocol=https;branch=nix031;name=serialport;destsuffix=serialport;type=git-dependency \
            git://github.com/otomam/rust-turbojpeg.git;protocol=https;branch=loong;name=turbojpeg;destsuffix=turbojpeg;type=git-dependency \
            git://github.com/loong64/libjpeg-turbo.git;protocol=https;branch=loong64/backport;name=libjpeg-turbo;destsuffix=turbojpeg/turbojpeg-sys/libjpeg-turbo;type=git-dependency \
            git://github.com/otomam/webrtc-util.git;protocol=https;branch=util;name=webrtc-util;destsuffix=webrtc-util;type=git-dependency \
 	   "
 
-SRCREV = "d86ad1a00e141c3079d18c8fa72613d12a3d3435"
+SRCREV = "b7a8cc0ee48a02fc5a51176df15cfd4fd4f63c52"
 
 SRCREV_FORMAT .= "_serialport_turbojpeg_webrtc-util"
 SRCREV_serialport = "fa5de61e5079225755eaee2a62cb4e1fbfd7bc11"

@@ -16,6 +16,9 @@ SRC_URI = " \
            file://wlan0.network \
            file://eth0-static.network \
            file://data.mount \
+           file://ping_gateway.sh \
+           file://ping-gateway.service \
+           file://ping-gateway.timer \
            "
 
 do_install () {
@@ -34,13 +37,20 @@ do_install () {
 	install -m 0644 ${UNPACKDIR}/eth0-static.network ${D}${sysconfdir}/systemd/network/70-eth0-static.network
 
     install -d ${D}/data
-    install -d ${D}${sysconfdir}/systemd/system/
-    install -m 0644 ${UNPACKDIR}/data.mount ${D}${sysconfdir}/systemd/system/data.mount
+    install -d ${D}${libexecdir}
+
+    install -m 0644 ${UNPACKDIR}/data.mount ${D}${systemd_system_unitdir}/data.mount
+
+    install -m 0755 ${UNPACKDIR}/ping_gateway.sh ${D}${libexecdir}/ping_gateway.sh
+    install -m 0644 ${UNPACKDIR}/ping-gateway.service ${D}${systemd_system_unitdir}/ping-gateway.service
+    install -m 0644 ${UNPACKDIR}/ping-gateway.timer ${D}${systemd_system_unitdir}/ping-gateway.timer
 }
 
-FILES:${PN} += " /data /usr /switch_root.sh "
+FILES:${PN} += " /data /switch_root.sh ${libexecdir} "
+
+inherit bin_package allarch
 
 inherit systemd
 
-SYSTEMD_SERVICE:${PN} = "data.mount"
+SYSTEMD_SERVICE:${PN} = "data.mount ping-gateway.service ping-gateway.timer"
 SYSTEMD_AUTO_ENABLE:${PN} = "enable"

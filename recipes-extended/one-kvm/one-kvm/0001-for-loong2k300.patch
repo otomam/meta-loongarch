@@ -1,0 +1,180 @@
+From 404fbd2485aeaf470f64ad17d6e7a97686cb42ca Mon Sep 17 00:00:00 2001
+From: oto <oto102079@gmail.com>
+Date: Thu, 17 Sep 2026 22:58:56 +0800
+Subject: [PATCH] for loong2k300
+
+---
+ src/config/schema/hid.rs         |  6 +++---
+ src/extensions/software_linux.rs |  2 +-
+ src/hid/otg.rs                   | 23 ++++++++++++++++++++---
+ src/otg/hid.rs                   | 10 ++++++++++
+ 4 files changed, 34 insertions(+), 7 deletions(-)
+
+diff --git a/src/config/schema/hid.rs b/src/config/schema/hid.rs
+index 6c53356..845f158 100644
+--- a/src/config/schema/hid.rs
++++ b/src/config/schema/hid.rs
+@@ -95,16 +95,16 @@ impl OtgHidFunctions {
+     pub fn full() -> Self {
+         Self {
+             keyboard: true,
+-            mouse_relative: true,
++            mouse_relative: false,
+             mouse_absolute: true,
+-            consumer: true,
++            consumer: false,
+         }
+     }
+ 
+     pub fn full_no_consumer() -> Self {
+         Self {
+             keyboard: true,
+-            mouse_relative: true,
++            mouse_relative: false,
+             mouse_absolute: true,
+             consumer: false,
+         }
+diff --git a/src/extensions/software_linux.rs b/src/extensions/software_linux.rs
+index ec4e792..0c54a93 100644
+--- a/src/extensions/software_linux.rs
++++ b/src/extensions/software_linux.rs
+@@ -16,5 +16,5 @@ pub fn binary_path(id: ExtensionId) -> PathBuf {
+ }
+ 
+ pub fn default_ttyd_shell() -> &'static str {
+-    "/bin/bash"
++    "/bin/sh"
+ }
+diff --git a/src/hid/otg.rs b/src/hid/otg.rs
+index 23443ea..e2c22ca 100644
+--- a/src/hid/otg.rs
++++ b/src/hid/otg.rs
+@@ -11,7 +11,7 @@ use std::io::Read;
+ use std::os::fd::AsFd;
+ use std::os::unix::fs::OpenOptionsExt;
+ use std::path::PathBuf;
+-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
++use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, Ordering};
+ use std::sync::Arc;
+ use std::thread;
+ use std::time::Duration;
+@@ -91,6 +91,8 @@ pub struct OtgBackend {
+     runtime_notify_tx: watch::Sender<()>,
+     runtime_worker_stop: Arc<AtomicBool>,
+     runtime_worker: Mutex<Option<thread::JoinHandle<()>>>,
++    last_abs_x: AtomicU16,
++    last_abs_y: AtomicU16,
+ }
+ 
+ const HID_WRITE_TIMEOUT_MS: i32 = 20;
+@@ -123,6 +125,8 @@ impl OtgBackend {
+             runtime_notify_tx,
+             runtime_worker_stop: Arc::new(AtomicBool::new(false)),
+             runtime_worker: Mutex::new(None),
++            last_abs_x: AtomicU16::new(0),
++            last_abs_y: AtomicU16::new(0),
+         })
+     }
+ 
+@@ -859,16 +863,21 @@ impl HidBackend for OtgBackend {
+                 self.send_mouse_report_relative(buttons, dx, dy, 0)?;
+             }
+             MouseEventType::MoveAbs => {
+-                // Coordinates 0–32767; buttons are sent only on the relative endpoint.
+                 let x = event.x.clamp(0, 32767) as u16;
+                 let y = event.y.clamp(0, 32767) as u16;
+-                self.send_mouse_report_absolute(0, x, y, 0)?;
++                self.last_abs_x.store(x, Ordering::Relaxed);
++                self.last_abs_y.store(y, Ordering::Relaxed);
++                self.send_mouse_report_absolute(buttons, x, y, 0)?;
+             }
+             MouseEventType::Down => {
+                 if let Some(button) = event.button {
+                     let bit = button.to_hid_bit();
+                     let new_buttons = self.mouse_buttons.fetch_or(bit, Ordering::Relaxed) | bit;
+                     self.send_mouse_report_relative(new_buttons, 0, 0, 0)?;
++
++                    let x = self.last_abs_x.load(Ordering::Relaxed);
++                    let y = self.last_abs_y.load(Ordering::Relaxed);
++                    self.send_mouse_report_absolute(new_buttons, x, y, 0)?;
+                 }
+             }
+             MouseEventType::Up => {
+@@ -876,10 +885,18 @@ impl HidBackend for OtgBackend {
+                     let bit = button.to_hid_bit();
+                     let new_buttons = self.mouse_buttons.fetch_and(!bit, Ordering::Relaxed) & !bit;
+                     self.send_mouse_report_relative(new_buttons, 0, 0, 0)?;
++
++                    let x = self.last_abs_x.load(Ordering::Relaxed);
++                    let y = self.last_abs_y.load(Ordering::Relaxed);
++                    self.send_mouse_report_absolute(new_buttons, x, y, 0)?;
+                 }
+             }
+             MouseEventType::Scroll => {
+                 self.send_mouse_report_relative(buttons, 0, 0, event.scroll)?;
++
++                let x = self.last_abs_x.load(Ordering::Relaxed);
++                let y = self.last_abs_y.load(Ordering::Relaxed);
++                self.send_mouse_report_absolute(buttons, x, y, event.scroll)?;
+             }
+         }
+ 
+diff --git a/src/otg/hid.rs b/src/otg/hid.rs
+index 6eff23e..3eb9920 100644
+--- a/src/otg/hid.rs
++++ b/src/otg/hid.rs
+@@ -69,6 +69,7 @@ pub struct HidFunction {
+     func_type: HidFunctionType,
+     name: String,
+     keyboard_leds: bool,
++    no_out_endpoint: bool,
+ }
+ 
+ impl HidFunction {
+@@ -78,6 +79,7 @@ impl HidFunction {
+             func_type: HidFunctionType::Keyboard,
+             name: format!("hid.usb{}", instance),
+             keyboard_leds,
++            no_out_endpoint: !keyboard_leds,
+         }
+     }
+ 
+@@ -87,6 +89,7 @@ impl HidFunction {
+             func_type: HidFunctionType::MouseRelative,
+             name: format!("hid.usb{}", instance),
+             keyboard_leds: false,
++            no_out_endpoint: true,
+         }
+     }
+ 
+@@ -96,6 +99,7 @@ impl HidFunction {
+             func_type: HidFunctionType::MouseAbsolute,
+             name: format!("hid.usb{}", instance),
+             keyboard_leds: false,
++            no_out_endpoint: true,
+         }
+     }
+ 
+@@ -105,6 +109,7 @@ impl HidFunction {
+             func_type: HidFunctionType::ConsumerControl,
+             name: format!("hid.usb{}", instance),
+             keyboard_leds: false,
++            no_out_endpoint: true,
+         }
+     }
+ 
+@@ -144,6 +149,11 @@ impl GadgetFunction for HidFunction {
+             self.func_type.report_desc(self.keyboard_leds),
+         )?;
+ 
++        let _ = write_file_if_exists(
++            &func_path.join("no_out_endpoint"),
++            if self.no_out_endpoint { "1" } else { "0" },
++        )?;
++
+         // Supported by the PiKVM HID kernel patch. Older kernels simply do
+         // not expose this ConfigFS attribute.
+         let _ = write_file_if_exists(&func_path.join("wakeup_on_write"), "1")?;
+-- 
+2.43.0
+

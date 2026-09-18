@@ -18,7 +18,7 @@ IMAGE_INSTALL += " \
     mtd-utils \
     mmc-utils \
     e2fsprogs \
-    parted \
+    htop\
     ethtool libubootenv-bin \
     iproute2 iproute2-ss \
     util-linux-lsblk util-linux-lscpu \

@@ -1,0 +1,33 @@
+From 2aa30057a046f78f9ca70d465c9c4ac2fd70d098 Mon Sep 17 00:00:00 2001
+From: oto <oto102079@gmail.com>
+Date: Tue, 8 Sep 2026 00:25:06 +0800
+Subject: [PATCH] spi2 to gpio
+
+---
+ .../loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts | 10 ----------
+ 1 file changed, 10 deletions(-)
+
+diff --git a/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts b/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
+index 179ad4972..3cf0623cd 100644
+--- a/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
++++ b/arch/loongarch/boot/dts/loongson_2k0300_99_pai_wifi.dts
+@@ -203,16 +203,6 @@
+ 	status = "okay";
+ };
+ 
+-&spi2 {
+-	status = "okay";
+-	pinctrl-0 = <&spi2_pin>;
+-	spidev@0{
+-		compatible = "rohm,dh2228fv";
+-		spi-max-frequency = <50000000>;
+-		reg = <0>;
+-	};
+-};
+-
+ &dc{
+ 	status = "disabled";
+ 	pinctrl-names = "default";
+-- 
+2.43.0
+

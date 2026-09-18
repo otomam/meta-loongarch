@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Ping Gateway every 20 minute
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=20min
+AccuracySec=1s
+Persistent=true
+Unit=ping-gateway.service
+
+[Install]
+WantedBy=timers.target
