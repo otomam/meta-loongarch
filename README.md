@@ -141,6 +141,6 @@ Environment variables updated. Please run 'reboot' to apply changes.
 默认开启键盘鼠标和U盘，占用了3个IN endpoint（最大支持3个IN），要开启别的功能需要关闭U盘。  
 默认只开启绝对定位鼠标，两种模式同时开启会占两个IN endpoint。  
 
-配置时要选择不使用音频。  
+* 配置时要选择不使用音频。  
 
-WIFI好像是会休眠，没搞明白，暂时写了个定时ping网关的脚本保持网络能通  
+* WIFI好像是会休眠，没搞明白，暂时写了个定时ping网关的脚本保持网络能通  

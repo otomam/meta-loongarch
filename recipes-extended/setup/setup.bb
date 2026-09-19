@@ -46,9 +46,13 @@ do_install () {
     install -m 0644 ${UNPACKDIR}/ping-gateway.timer ${D}${systemd_system_unitdir}/ping-gateway.timer
 }
 
-FILES:${PN} += " /data /switch_root.sh ${libexecdir} "
+FILES:${PN} += " /data /switch_root.sh /usr "
 
-inherit bin_package allarch
+# Skip the unwanted steps
+do_configure[noexec] = "1"
+do_compile[noexec] = "1"
+
+inherit allarch
 
 inherit systemd
 
