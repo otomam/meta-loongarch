@@ -15,18 +15,16 @@ IMAGE_INSTALL += " \
     lrzsz \
     file \
     ldd \
-    mtd-utils \
-    mmc-utils \
-    e2fsprogs \
-    htop\
-    ethtool libubootenv-bin \
+    mtd-utils mmc-utils e2fsprogs \
+    htop procps psmisc tzdata-asia \
+    ethtool iw libubootenv-bin \
     iproute2 iproute2-ss \
+    iputils-arping \
     util-linux-lsblk util-linux-lscpu \
     one-kvm ttyd \
     dropbear \
     aic8800 wpa-supplicant wireless-regdb-static \
-    kernel-module-cfg80211 kernel-module-rfkill kernel-module-cfg80211 kernel-module-rfkill \
-    setup \
+    setup libgpiod-tools\
     "
 
 # IMAGE_FSTYPES += " wic"

@@ -16,9 +16,9 @@ SRC_URI = " \
            file://wlan0.network \
            file://eth0-static.network \
            file://data.mount \
-           file://ping_gateway.sh \
-           file://ping-gateway.service \
-           file://ping-gateway.timer \
+           file://wifi_arping.sh \
+           file://wifi-arping.service \
+           file://wifi-arping.timer \
            "
 
 do_install () {
@@ -41,14 +41,16 @@ do_install () {
 
     install -m 0644 ${UNPACKDIR}/data.mount ${D}${systemd_system_unitdir}/data.mount
 
-    install -m 0755 ${UNPACKDIR}/ping_gateway.sh ${D}${libexecdir}/ping_gateway.sh
-    install -m 0644 ${UNPACKDIR}/ping-gateway.service ${D}${systemd_system_unitdir}/ping-gateway.service
-    install -m 0644 ${UNPACKDIR}/ping-gateway.timer ${D}${systemd_system_unitdir}/ping-gateway.timer
+    install -m 0755 ${UNPACKDIR}/wifi_arping.sh ${D}${libexecdir}/wifi_arping.sh
+    install -m 0644 ${UNPACKDIR}/wifi-arping.service ${D}${systemd_system_unitdir}/wifi-arping.service
+    install -m 0644 ${UNPACKDIR}/wifi-arping.timer ${D}${systemd_system_unitdir}/wifi-arping.timer
 }
 
 FILES:${PN} += " /data /switch_root.sh /usr "
 
 # Skip the unwanted steps
+do_fetch[noexec] = "1"
+do_patch[noexec] = "1"
 do_configure[noexec] = "1"
 do_compile[noexec] = "1"
 
@@ -56,5 +58,8 @@ inherit allarch
 
 inherit systemd
 
-SYSTEMD_SERVICE:${PN} = "data.mount ping-gateway.service ping-gateway.timer"
+SYSTEMD_SERVICE:${PN} = "data.mount wifi-arping.timer"
 SYSTEMD_AUTO_ENABLE:${PN} = "enable"
+
+# wifi_arping.sh uses ip/awk/cut and arping
+RDEPENDS:${PN} += "iputils-arping iproute2"

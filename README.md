@@ -143,4 +143,7 @@ Environment variables updated. Please run 'reboot' to apply changes.
 
 * 配置时要选择不使用音频。  
 
-* WIFI好像是会休眠，没搞明白，暂时写了个定时ping网关的脚本保持网络能通  
+* WIFI 空闲一段时间后会出现PC ping不通的情况，有时从板子上ping网关能恢复，有时又不行。
+  镜像里通过 `wifi-arping.timer` 每20秒从 `wlan0` 动态读取 IPv4 地址并发送 Gratuitous ARP；
+  没有有效 IP 时跳过。对应脚本为 `/usr/libexec/wifi_arping.sh`，依赖 `iputils-arping`。
+  也可以不用arp，测试过每30秒ping一下网关也能保持网络连通。
